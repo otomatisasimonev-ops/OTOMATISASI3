@@ -216,11 +216,18 @@ const Dashboard = () => {
   };
 
   const cards = [
-    { title: 'Total Badan Publik', value: stats.badanCount, accent: 'from-primary to-secondary' },
-    { title: 'Email Terkirim', value: stats.sentCount, accent: 'from-secondary to-accent' },
-    { title: 'Menunggu Kirim', value: stats.pendingCount, accent: 'from-rose-400 to-primary' },
-    { title: 'Log Tercatat', value: stats.logCount, accent: 'from-slate-800 to-slate-500' }
+    { title: 'Total Badan Publik', value: stats.badanCount, accent: 'emerald', hint: 'Basis target aktif' },
+    { title: 'Email Terkirim', value: stats.sentCount, accent: 'sky', hint: 'Total kirim akumulasi' },
+    { title: 'Menunggu Kirim', value: stats.pendingCount, accent: 'amber', hint: 'Status pending' },
+    { title: 'Log Tercatat', value: stats.logCount, accent: 'slate', hint: 'Riwayat di History' }
   ];
+
+  const accentMap = {
+    emerald: { text: 'text-emerald-700', dot: 'bg-emerald-400', chip: 'bg-emerald-50 border-emerald-100' },
+    sky: { text: 'text-sky-700', dot: 'bg-sky-400', chip: 'bg-sky-50 border-sky-100' },
+    amber: { text: 'text-amber-700', dot: 'bg-amber-400', chip: 'bg-amber-50 border-amber-100' },
+    slate: { text: 'text-slate-700', dot: 'bg-slate-400', chip: 'bg-slate-50 border-slate-200' }
+  };
 
   return (
     <div className="space-y-6">
@@ -260,12 +267,21 @@ const Dashboard = () => {
         {cards.map((card) => (
           <div
             key={card.title}
-            className={`rounded-2xl p-5 bg-gradient-to-br ${card.accent} text-white shadow-soft border border-white/30`}
+            className="relative overflow-hidden rounded-2xl p-5 bg-white border border-slate-200 shadow-soft hover:shadow-lg transition transform hover:-translate-y-1"
           >
-            <div className={`bg-gradient-to-r ${card.accent} rounded-xl px-3 py-2 inline-block mb-3 text-xs uppercase`}>
-              {card.title}
+            <div className="absolute inset-x-0 -top-6 h-16 bg-gradient-to-r from-transparent via-primary/5 to-transparent pointer-events-none" />
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${accentMap[card.accent]?.dot || 'bg-slate-300'} animate-pulse`}
+              />
+              <div className="text-xs uppercase text-slate-500 font-semibold">{card.title}</div>
             </div>
-            <div className="text-4xl font-bold">{loading ? '...' : card.value}</div>
+            <div className="text-4xl font-bold text-slate-900 mt-2">{loading ? '...' : card.value}</div>
+            <div
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[12px] border ${accentMap[card.accent]?.chip || 'bg-slate-50 border-slate-200'} mt-2`}
+            >
+              <span className={accentMap[card.accent]?.text || 'text-slate-700'}>{card.hint}</span>
+            </div>
           </div>
         ))}
       </div>
