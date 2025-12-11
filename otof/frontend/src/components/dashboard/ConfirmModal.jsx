@@ -3,7 +3,7 @@ const ConfirmModal = ({ open, selectedCount, onCancel, onConfirm }) => {
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-100">
-        <h3 className="text-xl font-bold text-slate-900 mb-2">Kirim sekarangx</h3>
+        <h3 className="text-xl font-bold text-slate-900 mb-2">Kirim sekarang</h3>
         <p className="text-sm text-slate-600 mb-4">
           Pastikan data benar dan KTP sudah terlampir. Email akan dikirim ke {selectedCount} penerima.
         </p>

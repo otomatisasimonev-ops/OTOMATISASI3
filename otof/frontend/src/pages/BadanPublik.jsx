@@ -38,6 +38,7 @@ const BadanPublik = () => {
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState([]);
   const [importError, setImportError] = useState('');
+  const [emailFilter, setEmailFilter] = useState('all');
 
   const fetchData = async () => {
     setLoading(true);
@@ -56,6 +57,11 @@ const BadanPublik = () => {
   }, []);
 
   const samplePreview = useMemo(() => data.slice(0, 5), [data]);
+  const filteredData = useMemo(() => {
+    if (emailFilter === 'with-email') return data.filter((d) => d.email);
+    if (emailFilter === 'no-email') return data.filter((d) => !d.email);
+    return data;
+  }, [data, emailFilter]);
 
   const openForm = (item) => {
     if (item) {
@@ -94,7 +100,7 @@ const BadanPublik = () => {
   };
 
   const deleteData = async (id) => {
-    if (!confirm('Hapus data inix')) return;
+    if (!confirm('Hapus data ini?')) return;
     try {
       await api.delete(`/badan-publik/${id}`);
       setStatusMessage('Data dihapus.');
@@ -206,6 +212,38 @@ const BadanPublik = () => {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-soft">
+        <div className="flex flex-wrap items-center gap-3 px-4 pt-4 text-sm text-slate-600">
+          <span className="text-xs uppercase tracking-[0.08em] text-slate-500">Filter cepat</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setEmailFilter('all')}
+              className={`px-3 py-1.5 rounded-full border text-xs font-semibold ${
+                emailFilter === 'all' ? 'bg-primary text-white border-primary' : 'border-slate-200 text-slate-700'
+              }`}
+            >
+              Semua
+            </button>
+            <button
+              onClick={() => setEmailFilter('with-email')}
+              className={`px-3 py-1.5 rounded-full border text-xs font-semibold ${
+                emailFilter === 'with-email' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'border-slate-200 text-slate-700'
+              }`}
+            >
+              Punya email
+            </button>
+            <button
+              onClick={() => setEmailFilter('no-email')}
+              className={`px-3 py-1.5 rounded-full border text-xs font-semibold ${
+                emailFilter === 'no-email' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'border-slate-200 text-slate-700'
+              }`}
+            >
+              Belum ada email
+            </button>
+          </div>
+          <span className="text-xs px-2 py-1 rounded-full bg-slate-100 border border-slate-200">
+            {filteredData.length} data sesuai filter
+          </span>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gradient-to-r from-slate-50 to-white text-slate-600">
@@ -228,21 +266,31 @@ const BadanPublik = () => {
                     Memuat data...
                   </td>
                 </tr>
-              ) : data.length === 0 ? (
+              ) : filteredData.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-center text-slate-500" colSpan={isAdmin ? 8 : 7}>
-                    Belum ada data.
+                    Tidak ada data sesuai filter ini.
                   </td>
                 </tr>
               ) : (
-                data.map((item, idx) => (
+                filteredData.map((item, idx) => (
                   <tr
                     key={item.id}
                     className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                   >
                     <td className="px-4 py-3 font-semibold text-slate-900">{item.nama_badan_publik}</td>
                     <td className="px-4 py-3 text-slate-700">{item.kategori}</td>
-                    <td className="px-4 py-3 text-slate-700">{item.email}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {item.email ? (
+                        <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs">
+                          {item.email}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs">
+                          email kosong
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-700">{item.website || '-'}</td>
                     <td className="px-4 py-3 text-slate-700 whitespace-pre-wrap w-[40%] min-w-[480px] align-top">
                       {item.pertanyaan || '-'}
@@ -258,7 +306,17 @@ const BadanPublik = () => {
                         {item.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{item.thread_id || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {item.thread_id ? (
+                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-200 text-xs">
+                          {item.thread_id}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full bg-slate-50 text-slate-500 border border-slate-200 text-xs">
+                          belum ada
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-700">{item.sent_count}</td>
                     {isAdmin && (
                       <td className="px-4 py-3 space-x-2">

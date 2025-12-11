@@ -598,7 +598,7 @@ const TemplateEditor = () => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3 border border-slate-100">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Simpan templatex</h3>
+                <h3 className="text-lg font-bold text-slate-900">Simpan template</h3>
                 <p className="text-sm text-slate-600">
                   Perubahan akan {overwriteWarning.includes('menimpa') ? 'menimpa template ini.' : 'membuat template baru.'}
                 </p>

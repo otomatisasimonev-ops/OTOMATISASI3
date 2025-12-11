@@ -14,6 +14,9 @@ const StatsGrid = ({ cards, loading }) => {
           className="relative overflow-hidden rounded-2xl p-5 bg-white border border-slate-200 shadow-soft hover:shadow-lg transition transform hover:-translate-y-1"
         >
           <div className="absolute inset-x-0 -top-6 h-16 bg-gradient-to-r from-transparent via-primary/5 to-transparent pointer-events-none" />
+          <div className="absolute top-3 right-3 text-[11px] px-3 py-1 rounded-full bg-sand-50 text-slate-600 border border-slate-200">
+            {card.source || 'API'} · {card.updatedAt || 'real-time'}
+          </div>
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${accentMap[card.accent]?.dot || 'bg-slate-300'} animate-pulse`}

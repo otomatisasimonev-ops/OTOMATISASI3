@@ -11,6 +11,11 @@ const Navbar = ({ onOpenSmtp }) => {
   return (
     <header className="flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur border-b border-slate-200">
       <div className="flex items-center gap-3">
+        <img
+          src="/icon.png"
+          alt="Logo Portal Keterbukaan Informasi"
+          className="h-10 w-auto max-w-[180px] object-contain hidden sm:block"
+        />
         <div
           onClick={onOpenSmtp}
           className="flex items-center gap-2 cursor-pointer group select-none"
@@ -25,17 +30,22 @@ const Navbar = ({ onOpenSmtp }) => {
           </span>
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="flex flex-col text-right">
-          <span className="text-sm font-semibold text-slate-800">{user?.username}</span>
-          <span className="text-xs text-slate-500 capitalize">{user?.role}</span>
+      <div className="flex items-center gap-4">
+        <div className="hidden sm:flex flex-col text-right">
+          <span className="text-sm font-semibold text-slate-800">Portal Keterbukaan Informasi</span>
         </div>
-        <button
-          onClick={logout}
-          className="bg-slate-900 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition"
-        >
-          Keluar
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col text-right">
+            <span className="text-sm font-semibold text-slate-800">{user?.username}</span>
+            <span className="text-xs text-slate-500 capitalize">{user?.role}</span>
+          </div>
+          <button
+            onClick={logout}
+            className="bg-slate-900 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition"
+          >
+            Keluar
+          </button>
+        </div>
       </div>
     </header>
   );

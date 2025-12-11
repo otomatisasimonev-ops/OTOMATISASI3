@@ -156,6 +156,9 @@ const ComposerSection = ({
                   {attachmentInfo}
                 </span>
               )}
+              <div className="text-[11px] text-slate-500">
+                KTP hanya digunakan untuk verifikasi permohonan dan tidak dibagikan ke pihak lain.
+              </div>
               {attachmentPreview && attachmentPreview.type?.startsWith('image/') && (
                 <div className="w-32 h-32 rounded-xl overflow-hidden border border-slate-200 shadow-soft">
                   <img src={attachmentPreview.url} alt="Preview KTP" className="w-full h-full object-cover" />

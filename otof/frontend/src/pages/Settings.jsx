@@ -61,6 +61,7 @@ const Settings = () => {
           <li>Setiap user punya SMTP sendiri; admin tidak berbagi kredensial.</li>
           <li>Jika gagal, cek 16 digit App Password dan pastikan IMAP aktif.</li>
           <li>Indikator di navbar akan hijau jika SMTP tersimpan.</li>
+          <li>Kredensial dan KTP hanya dipakai untuk proses pengiriman; jangan bagikan ke luar sistem.</li>
         </ul>
       </div>
       <SmtpModal open={open} onClose={() => setOpen(false)} />

@@ -235,7 +235,7 @@ const AddUser = () => {
               {pagedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-4 text-center text-slate-500">
-                    Belum ada user.
+                    Belum ada user. Tambah user pertama untuk mulai penugasan.
                   </td>
                 </tr>
               ) : (

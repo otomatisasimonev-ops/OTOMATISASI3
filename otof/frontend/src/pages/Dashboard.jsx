@@ -458,48 +458,80 @@ const Dashboard = () => {
   };
 
   const cards = [
-    { title: 'Total Badan Publik', value: stats.badanCount, accent: 'emerald', hint: 'Basis target aktif' },
-    { title: 'Email Terkirim', value: stats.sentCount, accent: 'sky', hint: 'Total kirim akumulasi' },
-    { title: 'Menunggu Kirim', value: stats.pendingCount, accent: 'amber', hint: 'Status pending' },
-    { title: 'Log Tercatat', value: stats.logCount, accent: 'slate', hint: 'Riwayat di History' }
+    { title: 'Total Badan Publik', value: stats.badanCount, accent: 'emerald', hint: 'Basis target aktif', source: 'API', updatedAt: 'sinkron' },
+    { title: 'Email Terkirim', value: stats.sentCount, accent: 'sky', hint: 'Total kirim akumulasi', source: 'Log', updatedAt: 'real-time' },
+    { title: 'Menunggu Kirim', value: stats.pendingCount, accent: 'amber', hint: 'Status pending', source: 'API', updatedAt: 'sinkron' },
+    { title: 'Log Tercatat', value: stats.logCount, accent: 'slate', hint: 'Riwayat di History', source: 'Log', updatedAt: 'real-time' }
   ];
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-soft p-4 col-span-1 lg:col-span-2 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Halo, {user?.username}</p>
-            <h1 className="text-2xl font-bold text-slate-900">Kirim Email Massal Sekarang</h1>
-            <p className="text-sm text-slate-500">Pilih penerima, isi template, lampirkan KTP, lalu kirim.</p>
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-soft p-5 col-span-1 lg:col-span-2">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-xs font-semibold text-primary uppercase tracking-[0.08em]">Halo, {user?.username}</p>
+              <h1 className="text-3xl font-bold text-slate-900" style={{ fontFamily: '"Newsreader", serif' }}>
+                Jalur cepat keterbukaan informasi
+              </h1>
+              <p className="text-sm text-slate-600 mt-1">
+                Ikuti tiga langkah: setel SMTP, siapkan data, kirim permohonan massal dengan lampiran KTP.
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <span className="px-3 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600">
+                Peran: {user?.role}
+              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  title={hasConfig ? 'SMTP tersimpan' : 'Belum ada SMTP, buka Settings'}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                    hasConfig ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}
+                >
+                  {hasConfig ? 'SMTP siap' : 'SMTP belum siap'}
+                </span>
+                <button
+                  onClick={verifySmtpQuick}
+                  disabled={smtpTesting}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold disabled:opacity-60"
+                >
+                  {smtpTesting ? 'Menguji...' : 'Cek SMTP'}
+                </button>
+                <Link
+                  to="/settings"
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold shadow-soft hover:bg-slate-800"
+                >
+                  Settings
+                </Link>
+              </div>
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <span className="px-3 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600">
-              Peran: {user?.role}
-            </span>
-            <div className="flex items-center gap-2">
-              <span
-                title={hasConfig ? 'SMTP tersimpan' : 'Belum ada SMTP, buka Settings'}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
-                  hasConfig ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { title: 'Setel SMTP', done: hasConfig, desc: 'App password & IMAP aktif', action: () => setShowGuide(false) },
+              { title: 'Siapkan data', done: badan.length > 0, desc: 'Import / tambah badan publik', action: null },
+              { title: 'Kirim', done: sendSummary.success > 0, desc: 'Pilih penerima, lampirkan KTP', action: null }
+            ].map((step, idx) => (
+              <div
+                key={step.title}
+                className={`rounded-xl border px-3 py-3 flex items-start gap-3 ${
+                  step.done ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'
                 }`}
               >
-                {hasConfig ? 'SMTP siap' : 'SMTP belum siap'}
-              </span>
-              <button
-                onClick={verifySmtpQuick}
-                disabled={smtpTesting}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold disabled:opacity-60"
-              >
-                {smtpTesting ? 'Menguji...' : 'Cek SMTP'}
-              </button>
-              <Link
-                to="/settings"
-                className="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold shadow-soft hover:bg-slate-800"
-              >
-                Settings
-              </Link>
-            </div>
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    step.done ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  {idx + 1}
+                </div>
+                <div className="text-sm">
+                  <div className="font-semibold text-slate-900">{step.title}</div>
+                  <div className="text-xs text-slate-600">{step.desc}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl shadow-soft p-4 space-y-2">

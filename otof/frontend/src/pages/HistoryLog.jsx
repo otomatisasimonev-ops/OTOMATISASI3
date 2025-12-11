@@ -270,47 +270,76 @@ const HistoryLog = () => {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-600">Status:</span>
-            <div className="flex rounded-xl border border-slate-200 overflow-hidden">
-              {['all', 'success', 'failed'].map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => setStatusFilter(opt)}
-                  className={`px-3 py-2 text-sm font-semibold ${
-                    statusFilter === opt ? 'bg-primary text-white' : 'text-slate-700'
-                  }`}
-                >
-                  {opt === 'all' ? 'Semua' : opt}
-                </button>
-              ))}
-            </div>
-          </div>
-          {user?.role === 'admin' && (
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-600">Kepemilikan:</span>
+              <span className="text-sm text-slate-600">Status:</span>
               <div className="flex rounded-xl border border-slate-200 overflow-hidden">
-                {[
-                  { key: 'all', label: 'Semua user' },
-                  { key: 'mine', label: 'Log saya' }
-                ].map((opt) => (
+                {['all', 'success', 'failed'].map((opt) => (
                   <button
-                    key={opt.key}
-                    onClick={() => setOwnerFilter(opt.key)}
+                    key={opt}
+                    onClick={() => setStatusFilter(opt)}
                     className={`px-3 py-2 text-sm font-semibold ${
-                      ownerFilter === opt.key ? 'bg-secondary text-white' : 'text-slate-700'
+                      statusFilter === opt ? 'bg-primary text-white' : 'text-slate-700'
                     }`}
                   >
-                    {opt.label}
+                    {opt === 'all' ? 'Semua' : opt}
                   </button>
                 ))}
               </div>
             </div>
-          )}
-          {infoMessage && (
-            <span className="text-sm text-primary font-semibold">{infoMessage}</span>
-          )}
+            {user?.role === 'admin' && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">Kepemilikan:</span>
+                <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+                  {[
+                    { key: 'all', label: 'Semua user' },
+                    { key: 'mine', label: 'Log saya' }
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setOwnerFilter(opt.key)}
+                      className={`px-3 py-2 text-sm font-semibold ${
+                        ownerFilter === opt.key ? 'bg-secondary text-white' : 'text-slate-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {infoMessage && (
+              <span className="text-sm text-primary font-semibold">{infoMessage}</span>
+            )}
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-700">
+            <div className="text-xs uppercase tracking-[0.08em] text-slate-500 font-semibold mb-1">Timeline singkat</div>
+            <div className="space-y-2 max-h-36 overflow-auto">
+              {filteredLogs.slice(0, 6).map((item) => (
+                <div key={item.id} className="flex items-start gap-2">
+                  <div
+                    className={`mt-0.5 w-2 h-2 rounded-full ${
+                      item.status === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
+                    }`}
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-slate-900 line-clamp-1">
+                      {item.badanPublik?.nama_badan_publik || '-'}
+                    </div>
+                    <div className="text-xs text-slate-500 line-clamp-2">
+                      {item.status === 'failed' ? item.error_message || 'Gagal' : 'Berhasil'} · {formatDate(item.sent_at)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {filteredLogs.length === 0 && <div className="text-xs text-slate-500">Belum ada log sesuai filter.</div>}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          
         </div>
 
         <div className="overflow-x-auto">
@@ -320,6 +349,7 @@ const HistoryLog = () => {
                 <th className="px-4 py-3 text-left">Pengirim</th>
                 <th className="px-4 py-3 text-left">Target</th>
                 <th className="px-4 py-3 text-left">Subjek</th>
+                <th className="px-4 py-3 text-left">Template/ID</th>
                 <th className="px-4 py-3 text-left">Waktu</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">Aksi</th>
@@ -335,7 +365,7 @@ const HistoryLog = () => {
               ) : filteredLogs.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
-                    Belum ada riwayat.
+                    Belum ada riwayat. Pastikan SMTP sudah siap atau cek filter.
                   </td>
                 </tr>
               ) : (
@@ -347,6 +377,14 @@ const HistoryLog = () => {
                     <td className="px-4 py-3 font-semibold text-slate-900">{item.user?.username}</td>
                     <td className="px-4 py-3 text-slate-700">{item.badanPublik?.nama_badan_publik}</td>
                     <td className="px-4 py-3 text-slate-700">{item.subject}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <div className="flex flex-col gap-1 text-xs">
+                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 w-max">
+                          {item.template_id || item.meta?.template_id || 'Tidak diketahui'}
+                        </span>
+                        <span className="text-[11px] text-slate-500">Req #{item.id}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-slate-700">{formatDate(item.sent_at)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusBadge(item.status)}`}>

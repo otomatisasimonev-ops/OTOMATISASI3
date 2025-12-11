@@ -169,6 +169,10 @@ const Penugasan = () => {
     });
     return map;
   }, [allAssignments]);
+  const unassignedCount = useMemo(
+    () => badan.filter((b) => !assignmentsMap[b.id]).length,
+    [assignmentsMap, badan]
+  );
 
   const pendingRequests = useMemo(() => requests.filter((r) => r.status === 'pending'), [requests]);
   const pendingByUser = useMemo(() => {
@@ -215,12 +219,21 @@ const Penugasan = () => {
           <h1 className="text-2xl font-bold text-slate-900">Penugasan</h1>
           <p className="text-sm text-slate-500">User hanya melihat badan publik yang ditugaskan.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {pendingRequests.length > 0 && (
             <span className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
               {pendingRequests.length} permintaan kuota menunggu
             </span>
           )}
+          <span
+            className={`px-3 py-2 rounded-xl text-sm border ${
+              unassignedCount
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }`}
+          >
+            {unassignedCount ? `${unassignedCount} badan publik belum ada penugas` : 'Semua sudah ditugaskan'}
+          </span>
           <Link
             to="/users"
             className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold shadow-soft hover:bg-emerald-700"
@@ -257,15 +270,19 @@ const Penugasan = () => {
                   >
                     <div className="flex items-center justify-between">
                       <div className="font-semibold">{u.username}</div>
-                      {pendingByUser[u.id] ? (
-                        <span className="text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
-                          {pendingByUser[u.id]} req
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-500">kuota {u.daily_quota}/hari</span>
-                      )}
+                      <span
+                        className={`text-[11px] px-2 py-1 rounded-full border ${
+                          pendingByUser[u.id]
+                            ? 'bg-amber-100 text-amber-700 border-amber-200'
+                            : u.daily_quota > DEFAULT_QUOTA
+                            ? 'bg-slate-200 text-slate-800 border-slate-300'
+                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        {pendingByUser[u.id] ? `${pendingByUser[u.id]} req` : `kuota ${u.daily_quota}/hari`}
+                      </span>
                     </div>
-                    <div className="text-xs text-slate-500">Kuota {u.daily_quota}/hari · ID #{u.id}</div>
+                    <div className="text-xs text-slate-500">Kuota {u.daily_quota}/hari - ID #{u.id}</div>
                   </div>
                 ))}
               {users.filter((u) => u.role === 'user').length === 0 && (
