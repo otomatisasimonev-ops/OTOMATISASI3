@@ -1,13 +1,16 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useEffect, useState } from 'react';
+import api from '../services/api';
 
 const baseLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: 'home' },
   { to: '/badan-publik', label: 'Data Badan Publik', icon: 'database' },
   { to: '/history', label: 'History Log', icon: 'clock' },
+  { to: '/kalender', label: 'Kalender Libur', icon: 'calendar' },
   { to: '/templates', label: 'Edit Template', icon: 'template' },
-  { to: '/settings', label: 'Pengaturan', icon: 'settings' }
+  { to: '/settings', label: 'Pengaturan', icon: 'settings' },
+  { to: '/tentang', label: 'Tentang', icon: 'info' }
 ];
 
 const adminLinks = [
@@ -17,7 +20,9 @@ const adminLinks = [
 
 const Sidebar = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const [templateAlert, setTemplateAlert] = useState(false);
+  const [pendingQuota, setPendingQuota] = useState(0);
 
   useEffect(() => {
     try {
@@ -28,7 +33,42 @@ const Sidebar = () => {
     }
   }, [user?.role]);
 
-  const links = user?.role === 'admin' ? [...baseLinks.slice(0, 4), ...adminLinks, baseLinks[4]] : baseLinks;
+  useEffect(() => {
+    const fetchPending = async () => {
+      if (user?.role !== 'admin') {
+        setPendingQuota(0);
+        return;
+      }
+      try {
+        const res = await api.get('/quota/requests');
+        const pending = (res.data || []).filter((r) => r.status === 'pending').length;
+        setPendingQuota(pending);
+      } catch (err) {
+        setPendingQuota(0);
+      }
+    };
+
+    const onRefreshEvent = () => fetchPending();
+    const onVisibility = () => {
+      if (!document.hidden) fetchPending();
+    };
+
+    fetchPending();
+    window.addEventListener('quota-requests-updated', onRefreshEvent);
+    window.addEventListener('focus', onRefreshEvent);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('quota-requests-updated', onRefreshEvent);
+      window.removeEventListener('focus', onRefreshEvent);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [user?.role, location.pathname]);
+
+  const links =
+    user?.role === 'admin'
+      ? [...baseLinks.slice(0, 4), ...adminLinks, ...baseLinks.slice(4)]
+      : baseLinks;
 
   const renderIcon = (name) => {
     const base = 'w-5 h-5 stroke-current';
@@ -61,6 +101,13 @@ const Sidebar = () => {
             <path d="M4 9h16M9 4v16" />
           </svg>
         );
+      case 'calendar':
+        return (
+          <svg className={base} fill="none" strokeWidth="1.8" viewBox="0 0 24 24">
+            <rect x="4" y="5" width="16" height="15" rx="2" />
+            <path d="M8 3v4M16 3v4M4 10h16" />
+          </svg>
+        );
       case 'settings':
         return (
           <svg className={base} fill="none" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -83,6 +130,13 @@ const Sidebar = () => {
             <path d="M3 19a6 6 0 0 1 12 0" />
             <circle cx="17" cy="9" r="2" />
             <path d="M14.5 17a4.5 4.5 0 0 1 6 0" />
+          </svg>
+        );
+      case 'info':
+        return (
+          <svg className={base} fill="none" strokeWidth="1.8" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8.5h.01M11 11h2v5h-2z" />
           </svg>
         );
       default:
@@ -115,6 +169,9 @@ const Sidebar = () => {
           >
             <span className="text-slate-500">{renderIcon(item.icon)}</span>
             <span className="text-sm flex-1">{item.label}</span>
+            {item.to === '/penugasan' && pendingQuota > 0 && location.pathname !== '/penugasan' && (
+              <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_0_6px_rgba(248,113,113,0.2)]" />
+            )}
             {item.to === '/templates' && templateAlert && (
               <span className="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
                 lengkapi

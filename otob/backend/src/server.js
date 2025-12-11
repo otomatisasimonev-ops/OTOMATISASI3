@@ -9,6 +9,7 @@ const emailRoutes = require('./routes/emailRoutes');
 const userRoutes = require('./routes/userRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const quotaRoutes = require('./routes/quotaRoutes');
+const holidayRoutes = require('./routes/holidayRoutes');
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use('/email', emailRoutes);
 app.use('/users', userRoutes);
 app.use('/assignments', assignmentRoutes);
 app.use('/quota', quotaRoutes);
+app.use('/holidays', holidayRoutes);
 
 // Bootstrapping server + koneksi database
 const startServer = async () => {

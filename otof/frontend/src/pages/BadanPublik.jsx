@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
+import { computeDueInfo } from '../utils/workdays';
+import { getMonitoringMap, saveMonitoringMap } from '../utils/monitoring';
+import { fetchHolidays } from '../services/holidays';
 
 const emptyForm = {
   nama_badan_publik: '',
@@ -39,6 +42,8 @@ const BadanPublik = () => {
   const [importPreview, setImportPreview] = useState([]);
   const [importError, setImportError] = useState('');
   const [emailFilter, setEmailFilter] = useState('all');
+  const [holidays, setHolidays] = useState([]);
+  const [monitoringMap, setMonitoringMap] = useState(() => getMonitoringMap());
 
   const fetchData = async () => {
     setLoading(true);
@@ -54,6 +59,18 @@ const BadanPublik = () => {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const res = await fetchHolidays();
+        setHolidays(res || []);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadHolidays();
   }, []);
 
   const samplePreview = useMemo(() => data.slice(0, 5), [data]);
@@ -182,6 +199,22 @@ const BadanPublik = () => {
     }
   };
 
+  const updateMonitoring = (id, updates) => {
+    setMonitoringMap((prev) => {
+      const next = {
+        ...prev,
+        [id]: { status: 'menunggu', extraDays: false, ...prev[id], ...updates, updatedAt: new Date().toISOString() }
+      };
+      saveMonitoringMap(next);
+      return next;
+    });
+  };
+
+  const truncate = (text, limit) => {
+    if (!text) return '';
+    return text.length > limit ? `${text.slice(0, limit)}…` : text;
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -248,14 +281,13 @@ const BadanPublik = () => {
           <table className="min-w-full text-sm">
             <thead className="bg-gradient-to-r from-slate-50 to-white text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left">Nama</th>
-                <th className="px-4 py-3 text-left">Kategori</th>
-                <th className="px-4 py-3 text-left">Email</th>
-                <th className="px-4 py-3 text-left">Website</th>
-                <th className="px-4 py-3 text-left w-[40%] min-w-[480px]">Pertanyaan</th>
+                <th className="px-4 py-3 text-left w-[28%]">Nama</th>
+                <th className="px-4 py-3 text-left w-[14%]">Kategori</th>
+                <th className="px-4 py-3 text-left w-[18%]">Email</th>
+                <th className="px-4 py-3 text-left w-[18%]">Website</th>
+                <th className="px-4 py-3 text-left w-[22%] min-w-[320px]">Pertanyaan</th>
                 <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Thread Id</th>
-                <th className="px-4 py-3 text-left">Sent</th>
+                <th className="px-4 py-3 text-left">Tenggat</th>
                 {isAdmin && <th className="px-4 py-3 text-left">Aksi</th>}
               </tr>
             </thead>
@@ -278,12 +310,12 @@ const BadanPublik = () => {
                     key={item.id}
                     className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                   >
-                    <td className="px-4 py-3 font-semibold text-slate-900">{item.nama_badan_publik}</td>
-                    <td className="px-4 py-3 text-slate-700">{item.kategori}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">{truncate(item.nama_badan_publik, 70)}</td>
+                    <td className="px-4 py-3 text-slate-700">{truncate(item.kategori, 16)}</td>
                     <td className="px-4 py-3 text-slate-700">
                       {item.email ? (
                         <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs">
-                          {item.email}
+                          {truncate(item.email, 36)}
                         </span>
                       ) : (
                         <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs">
@@ -291,9 +323,9 @@ const BadanPublik = () => {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{item.website || '-'}</td>
-                    <td className="px-4 py-3 text-slate-700 whitespace-pre-wrap w-[40%] min-w-[480px] align-top">
-                      {item.pertanyaan || '-'}
+                    <td className="px-4 py-3 text-slate-700">{truncate(item.website || '-', 36)}</td>
+                    <td className="px-4 py-3 text-slate-700 whitespace-pre-wrap w-[22%] min-w-[320px] align-top">
+                      {truncate(item.pertanyaan || '-', 60)}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -307,17 +339,31 @@ const BadanPublik = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-700">
-                      {item.thread_id ? (
-                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-200 text-xs">
-                          {item.thread_id}
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 rounded-full bg-slate-50 text-slate-500 border border-slate-200 text-xs">
-                          belum ada
-                        </span>
-                      )}
+                      {(() => {
+                        const monitor = monitoringMap[item.id] || {};
+                        const info = computeDueInfo({
+                          startDate: monitor.startDate,
+                          baseDays: 10,
+                          extraDays: monitor.extraDays ? 7 : 0,
+                          holidays
+                        });
+                        return (
+                          <div className="space-y-2 text-xs text-slate-600">
+                            <button
+                              onClick={() => updateMonitoring(item.id, { extraDays: !monitor.extraDays })}
+                              disabled={!monitor.startDate}
+                              className={`text-[11px] px-3 py-1.5 rounded-lg border ${
+                                monitor.extraDays
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                              } ${!monitor.startDate ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              {monitor.extraDays ? '+7 hari aktif' : '+7 hari'}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{item.sent_count}</td>
                     {isAdmin && (
                       <td className="px-4 py-3 space-x-2">
                         <button

@@ -1,3 +1,5 @@
+import { computeDueInfo } from '../../utils/workdays';
+
 const RecipientTable = ({
   badan,
   selectedIds,
@@ -13,8 +15,13 @@ const RecipientTable = ({
   categories = [],
   statuses = [],
   selectFiltered,
-  clearSelection
+  clearSelection,
+  holidays = [],
+  monitoringMap = {},
+  onUpdateMonitoring
 }) => {
+  const holidayList = holidays || [];
+
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-soft p-5 space-y-3">
       <div className="flex flex-col gap-3">
@@ -93,41 +100,68 @@ const RecipientTable = ({
               <th className="px-4 py-3 text-left">Email</th>
               <th className="px-4 py-3 text-left">Pertanyaan</th>
               <th className="px-4 py-3 text-left">Sent</th>
+              <th className="px-4 py-3 text-left">Tenggat</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                <td className="px-4 py-6 text-center text-slate-500" colSpan={7}>
                   Memuat data...
                 </td>
               </tr>
             ) : badan.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                <td className="px-4 py-6 text-center text-slate-500" colSpan={7}>
                   Belum ada data badan publik.
                 </td>
               </tr>
             ) : (
-              badan.map((item, idx) => (
-                <tr
-                  key={item.id}
-                  className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-primary/5 transition`}
-                >
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(item.id)}
-                      onChange={() => toggleSelect(item.id)}
-                    />
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{item.nama_badan_publik}</td>
-                  <td className="px-4 py-3 text-slate-700">{item.kategori}</td>
-                  <td className="px-4 py-3 text-slate-700">{item.email}</td>
-                  <td className="px-4 py-3 text-slate-700 max-w-3xl whitespace-pre-wrap">{item.pertanyaan}</td>
-                  <td className="px-4 py-3 text-slate-700">{item.sent_count}</td>
-                </tr>
-              ))
+              badan.map((item, idx) => {
+                const monitor = monitoringMap[item.id] || {};
+                const startDate = monitor.startDate || '';
+                const dueInfo = computeDueInfo({
+                  startDate,
+                  baseDays: 10,
+                  extraDays: monitor.extraDays ? 7 : 0,
+                  holidays: holidayList
+                });
+
+                return (
+                  <tr
+                    key={item.id}
+                    className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-primary/5 transition`}
+                  >
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">{item.nama_badan_publik}</td>
+                    <td className="px-4 py-3 text-slate-700">{item.kategori}</td>
+                    <td className="px-4 py-3 text-slate-700">{item.email}</td>
+                    <td className="px-4 py-3 text-slate-700 max-w-3xl whitespace-pre-wrap">{item.pertanyaan}</td>
+                    <td className="px-4 py-3 text-slate-700">{item.sent_count}</td>
+                    <td className="px-4 py-3 text-slate-700 space-y-2 min-w-[220px]">
+                      <div className="text-xs text-slate-600">
+                        Tanggal kirim:{' '}
+                        <span className="font-semibold text-slate-800">{startDate || '-'}</span>
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        Jatuh tempo:{' '}
+                        <span className="font-semibold text-slate-800">{dueInfo.dueDateLabel || '-'}</span>{' '}
+                        {dueInfo.daysLeft != null && dueInfo.dueDateLabel && (
+                          <span className={dueInfo.overdue ? 'text-rose-600' : 'text-slate-600'}>
+                            ({dueInfo.daysLeft} hari lagi)
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

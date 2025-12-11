@@ -9,6 +9,8 @@ import TemplateEditor from './pages/TemplateEditor';
 import Settings from './pages/Settings';
 import AddUser from './pages/AddUser';
 import Penugasan from './pages/Penugasan';
+import Tentang from './pages/Tentang';
+import HolidayCalendar from './pages/HolidayCalendar';
 
 const App = () => {
   return (
@@ -25,6 +27,8 @@ const App = () => {
             <Route path="/penugasan" element={<Penugasan />} />
             <Route path="/users" element={<AddUser />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/tentang" element={<Tentang />} />
+            <Route path="/kalender" element={<HolidayCalendar />} />
           </Route>
         </Route>
       </Routes>

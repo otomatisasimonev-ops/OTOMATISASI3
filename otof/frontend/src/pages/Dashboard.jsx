@@ -15,6 +15,9 @@ import QuotaCard from '../components/dashboard/QuotaCard';
 import AssignmentsCard from '../components/dashboard/AssignmentsCard';
 import DEFAULT_TEMPLATES from '../constants/templates';
 import QUOTES from '../constants/quotes';
+import { getMonitoringMap, saveMonitoringMap } from '../utils/monitoring';
+import { computeDueInfo } from '../utils/workdays';
+import { fetchHolidays } from '../services/holidays';
 
 const extractPlaceholders = (subject, body) => {
   const set = new Set();
@@ -107,6 +110,8 @@ const Dashboard = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState(DEFAULT_TEMPLATES[0].id);
   const [bodyTemplate, setBodyTemplate] = useState(DEFAULT_TEMPLATES[0].body);
   const [customValues, setCustomValues] = useState({});
+  const [holidays, setHolidays] = useState([]);
+  const [monitoringMap, setMonitoringMap] = useState(() => getMonitoringMap());
   const templates = useMemo(() => {
     const overrideMap = new Map(customTemplates.map((t) => [t.id, t]));
     const defaultIds = new Set(DEFAULT_TEMPLATES.map((t) => t.id));
@@ -176,6 +181,18 @@ const Dashboard = () => {
   }, [user, isAdmin]);
 
   useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const res = await fetchHolidays();
+        setHolidays(res || []);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadHolidays();
+  }, []);
+
+  useEffect(() => {
     if (!user || isAdmin) return;
 
     const fetchQuota = async () => {
@@ -225,6 +242,23 @@ const Dashboard = () => {
     setCustomValues((prev) => ({ ...prev, [field]: value }));
   };
 
+  const updateMonitoring = useCallback((id, updates) => {
+    setMonitoringMap((prev) => {
+      const next = {
+        ...prev,
+        [id]: {
+          status: 'menunggu',
+          extraDays: false,
+          ...prev[id],
+          ...updates,
+          updatedAt: new Date().toISOString()
+        }
+      };
+      saveMonitoringMap(next);
+      return next;
+    });
+  }, []);
+
   const toggleSelect = (id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -260,9 +294,9 @@ const Dashboard = () => {
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const limit = 7 * 1024 * 1024;
+    const limit = 5 * 1024 * 1024; // 5MB untuk menghindari payload terlalu besar di backend
     if (file.size > limit) {
-      setStatusMessage('Ukuran file maksimal 7MB agar tidak ditolak server.');
+      setStatusMessage('Ukuran file maksimal 5MB agar tidak ditolak server (sesuaikan resolusi/kompres).');
       return;
     }
     const reader = new FileReader();
@@ -298,6 +332,30 @@ const Dashboard = () => {
     () => manualFields.filter((f) => !customValues[f]),
     [manualFields, customValues]
   );
+
+  const monitoringSummary = useMemo(() => {
+    const overdue = [];
+    const dueSoon = [];
+    badan.forEach((b) => {
+      const monitor = monitoringMap[b.id];
+      if (!monitor || monitor.status === 'responded' || monitor.status === 'no-response') return;
+      if (!monitor.startDate) return;
+      const info = computeDueInfo({
+        startDate: monitor.startDate,
+        baseDays: 10,
+        extraDays: monitor.extraDays ? 7 : 0,
+        holidays
+      });
+      if (!info.dueDate) return;
+      const entry = { id: b.id, name: b.nama_badan_publik, dueDate: info.dueDateLabel, daysLeft: info.daysLeft };
+      if (info.overdue) {
+        overdue.push(entry);
+      } else if (info.daysLeft != null && info.daysLeft <= 2) {
+        dueSoon.push(entry);
+      }
+    });
+    return { overdue, dueSoon };
+  }, [badan, monitoringMap, holidays]);
 
   const renderTemplate = useCallback(
     (tpl, target) => {
@@ -406,6 +464,16 @@ const Dashboard = () => {
         setAttachment(null);
         setAttachmentPreview(null);
         setStatusMessage(failed > 0 ? 'Beberapa target gagal, cek kembali data email.' : '');
+        const todayIso = new Date().toISOString().slice(0, 10);
+        selectedIds.forEach((id) =>
+          updateMonitoring(id, {
+            startDate: todayIso,
+            status: 'menunggu',
+            extraDays: false,
+            respondedAt: null,
+            closedAt: null
+          })
+        );
       }
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Gagal mengirim email');
@@ -481,6 +549,35 @@ const Dashboard = () => {
 
       <StatsGrid cards={cards} loading={loading} />
 
+      {(monitoringSummary.overdue.length > 0 || monitoringSummary.dueSoon.length > 0) && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-soft p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-500">Pengingat pemantauan</p>
+              <h3 className="text-lg font-bold text-slate-900">Respon badan publik</h3>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {monitoringSummary.overdue.map((item) => (
+              <span
+                key={`over-${item.id}`}
+                className="px-3 py-1 rounded-full bg-rose-100 text-rose-700 border border-rose-200"
+              >
+                Lewat tenggat: {item.name} (due {item.dueDate})
+              </span>
+            ))}
+            {monitoringSummary.dueSoon.map((item) => (
+              <span
+                key={`soon-${item.id}`}
+                className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200"
+              >
+                Jatuh tempo {item.dueDate} ({item.daysLeft} hari lagi) - {item.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {user?.role !== 'admin' && (
         <AssignmentsCard assignments={assignments} onOpenModal={() => setAssignmentsModal(true)} />
       )}
@@ -525,6 +622,9 @@ const Dashboard = () => {
         statuses={statuses}
         selectFiltered={selectFiltered}
         clearSelection={clearSelection}
+        holidays={holidays}
+        monitoringMap={monitoringMap}
+        onUpdateMonitoring={updateMonitoring}
       />
 
       <SuccessModal info={successInfo} onClose={() => setSuccessInfo(null)} />

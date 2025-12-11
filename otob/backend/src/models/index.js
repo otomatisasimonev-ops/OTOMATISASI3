@@ -6,6 +6,7 @@ const EmailLogModel = require('./emailLog');
 const AssignmentModel = require('./assignment');
 const QuotaRequestModel = require('./quotaRequest');
 const AssignmentHistoryModel = require('./assignmentHistory');
+const HolidayModel = require('./holiday');
 
 const User = UserModel(sequelize);
 const BadanPublik = BadanPublikModel(sequelize);
@@ -14,6 +15,7 @@ const EmailLog = EmailLogModel(sequelize);
 const Assignment = AssignmentModel(sequelize);
 const QuotaRequest = QuotaRequestModel(sequelize);
 const AssignmentHistory = AssignmentHistoryModel(sequelize);
+const Holiday = HolidayModel(sequelize);
 
 User.hasOne(SmtpConfig, {
   foreignKey: 'user_id',
@@ -56,5 +58,6 @@ module.exports = {
   EmailLog,
   Assignment,
   QuotaRequest,
-  AssignmentHistory
+  AssignmentHistory,
+  Holiday
 };

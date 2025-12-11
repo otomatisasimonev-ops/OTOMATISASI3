@@ -199,6 +199,7 @@ const Penugasan = () => {
       const verb = status === 'approved' ? 'disetujui' : 'ditolak';
       setToast({ message: `Permintaan kuota ${verb}`, type: 'success' });
       await refreshData(true, selectedUserId);
+      window.dispatchEvent(new Event('quota-requests-updated'));
     } catch (err) {
       const msg = err.response?.data?.message || 'Gagal memproses permintaan';
       setToast({ message: msg, type: 'error' });
