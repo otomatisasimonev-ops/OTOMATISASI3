@@ -68,7 +68,7 @@ const HistoryLog = () => {
 
   useEffect(() => {
     if (!user) return;
-    const streamUrl = `${baseUrl}/email/stream?userId=${user.id}&username=${user.username}`;
+    const streamUrl = `${baseUrl}/email/streamxuserId=${user.id}&username=${user.username}`;
     setStreamStatus('connecting');
     const es = new EventSource(streamUrl);
 
@@ -390,14 +390,14 @@ const HistoryLog = () => {
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Detail Log</h3>
                 <p className="text-sm text-slate-500">
-                  {formatDate(selectedLog.sent_at)} • {selectedLog.user?.username}
+                  {formatDate(selectedLog.sent_at)} - {selectedLog.user?.username}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedLog(null)}
                 className="text-slate-500 hover:text-slate-800 text-xl font-bold"
               >
-                Į-
+                ×
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -445,7 +445,7 @@ const HistoryLog = () => {
                   <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
                     {selectedLog.attachments_meta.map((att) => (
                       <li key={att.filename}>
-                        {att.filename} ({att.readableSize || att.size || '?'} | {att.contentType || 'unknown'})
+                        {att.filename} ({att.readableSize || att.size || 'x'} | {att.contentType || 'unknown'})
                       </li>
                     ))}
                   </ul>

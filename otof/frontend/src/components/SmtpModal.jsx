@@ -7,31 +7,71 @@ const SmtpModal = ({ open, onClose }) => {
   const [emailAddress, setEmailAddress] = useState('');
   const [appPassword, setAppPassword] = useState('');
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [feedbackType, setFeedbackType] = useState('info');
 
   useEffect(() => {
     if (!open) {
       setEmailAddress('');
       setAppPassword('');
       setFeedback('');
+      setFeedbackType('info');
     }
   }, [open]);
+
+  const verifySmtp = async () => {
+    if (!emailAddress || !appPassword) {
+      setFeedbackType('error');
+      setFeedback('Isi email dan app password terlebih dulu.');
+      return false;
+    }
+    setTesting(true);
+    setFeedback('');
+    setFeedbackType('info');
+    try {
+      const res = await api.post('/config/smtp/verify', {
+        email_address: emailAddress,
+        app_password: appPassword
+      });
+      setFeedbackType('success');
+      setFeedback(res.data?.message || 'SMTP valid. Siap digunakan.');
+      return true;
+    } catch (err) {
+      setFeedbackType('error');
+      setFeedback(
+        err.response?.data?.message ||
+          'SMTP tidak valid. Periksa email + App Password Gmail, pastikan 2FA & IMAP aktif.'
+      );
+      return false;
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setFeedback('');
+    setFeedbackType('info');
     try {
+      const ok = await verifySmtp();
+      if (!ok) {
+        setSaving(false);
+        return;
+      }
       await api.post('/config/smtp', {
         email_address: emailAddress,
         app_password: appPassword
       });
-      setFeedback('Konfigurasi tersimpan. Indikator akan berubah hijau.');
+      setFeedbackType('success');
+      setFeedback('SMTP valid dan tersimpan. Indikator akan berubah hijau.');
       setHasConfig(true);
       await checkConfig();
-      setTimeout(onClose, 600);
+      setTimeout(onClose, 800);
     } catch (err) {
-      setFeedback(err.response?.data?.message || 'Gagal menyimpan SMTP');
+      setFeedbackType('error');
+      setFeedback(err.response?.data?.message || 'Gagal memverifikasi atau menyimpan SMTP');
     } finally {
       setSaving(false);
     }
@@ -84,8 +124,24 @@ const SmtpModal = ({ open, onClose }) => {
               Buat di Google Account &gt; Security &gt; App Passwords.
             </p>
           </div>
-          {feedback && <div className="text-sm text-primary">{feedback}</div>}
-          <div className="flex justify-end gap-2">
+          {feedback && (
+            <div
+              className={`text-sm ${
+                feedbackType === 'error' ? 'text-rose-600' : 'text-primary'
+              }`}
+            >
+              {feedback}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={verifySmtp}
+              disabled={saving || testing}
+              className="px-4 py-3 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {testing ? 'Menguji...' : 'Cek SMTP'}
+            </button>
             <button
               type="button"
               onClick={onClose}
@@ -98,7 +154,7 @@ const SmtpModal = ({ open, onClose }) => {
               disabled={saving}
               className="px-5 py-3 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60"
             >
-              {saving ? 'Menyimpan...' : 'Simpan SMTP'}
+              {saving ? 'Verifikasi & Simpan...' : 'Verifikasi & Simpan'}
             </button>
           </div>
         </form>

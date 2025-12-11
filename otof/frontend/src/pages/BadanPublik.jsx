@@ -22,6 +22,8 @@ const expectedHeaders = [
   'Status',
   'Thread Id'
 ];
+const optionalHeaders = ['Email'];
+const requiredHeaders = expectedHeaders.filter((h) => !optionalHeaders.includes(h));
 
 const BadanPublik = () => {
   const { user } = useAuth();
@@ -92,7 +94,7 @@ const BadanPublik = () => {
   };
 
   const deleteData = async (id) => {
-    if (!confirm('Hapus data ini?')) return;
+    if (!confirm('Hapus data inix')) return;
     try {
       await api.delete(`/badan-publik/${id}`);
       setStatusMessage('Data dihapus.');
@@ -118,28 +120,29 @@ const BadanPublik = () => {
       }
       const header = rows[0].map((h) => String(h || '').trim());
       const normalizedHeader = header.map((h) => h.toLowerCase());
-      const normalizedExpected = expectedHeaders.map((h) => h.toLowerCase());
+      const normalizedRequired = requiredHeaders.map((h) => h.toLowerCase());
 
       const headerValid =
-        normalizedHeader.length >= normalizedExpected.length &&
-        normalizedExpected.every((h) => normalizedHeader.includes(h));
+        normalizedHeader.length >= normalizedRequired.length &&
+        normalizedRequired.every((h) => normalizedHeader.includes(h));
 
       if (!headerValid) {
-        setImportError('Struktur header tidak sesuai. Ikuti contoh template.');
+        setImportError('Struktur header tidak sesuai. Ikuti contoh template. Kolom Email opsional.');
         return;
       }
 
       const dataRows = rows.slice(1).filter((r) => r.some((cell) => cell));
       const objs = dataRows.map((r) => {
         const map = Object.fromEntries(header.map((h, idx) => [h, r[idx]]));
+        const email = String(map['Email'] ?? '').trim();
         return {
-          nama_badan_publik: map['Nama Badan Publik'] || '',
-          kategori: map['Kategori'] || '',
-          website: map['Website'] || '',
-          pertanyaan: map['Pertanyaan'] || '',
-          email: map['Email'] || '',
-          status: map['Status'] || 'pending',
-          thread_id: map['Thread Id'] || ''
+          nama_badan_publik: String(map['Nama Badan Publik'] ?? '').trim(),
+          kategori: String(map['Kategori'] ?? '').trim(),
+          website: String(map['Website'] ?? '').trim(),
+          pertanyaan: String(map['Pertanyaan'] ?? '').trim(),
+          email,
+          status: String(map['Status'] ?? '').trim() || 'pending',
+          thread_id: String(map['Thread Id'] ?? '').trim()
         };
       });
 
@@ -156,7 +159,14 @@ const BadanPublik = () => {
       return;
     }
     try {
-      await api.post('/badan-publik/import', { records: importPreview });
+      const payloadRecords = importPreview.map((r) => {
+        const clean = { ...r };
+        if (!clean.email) {
+          delete clean.email;
+        }
+        return clean;
+      });
+      await api.post('/badan-publik/import', { records: payloadRecords });
       setImportError('');
       setImportOpen(false);
       setStatusMessage(`Import berhasil (${importPreview.length} data contoh; total mengikuti file).`);
@@ -204,7 +214,7 @@ const BadanPublik = () => {
                 <th className="px-4 py-3 text-left">Kategori</th>
                 <th className="px-4 py-3 text-left">Email</th>
                 <th className="px-4 py-3 text-left">Website</th>
-                <th className="px-4 py-3 text-left w-[720px]">Pertanyaan</th>
+                <th className="px-4 py-3 text-left w-[40%] min-w-[480px]">Pertanyaan</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">Thread Id</th>
                 <th className="px-4 py-3 text-left">Sent</th>
@@ -234,7 +244,9 @@ const BadanPublik = () => {
                     <td className="px-4 py-3 text-slate-700">{item.kategori}</td>
                     <td className="px-4 py-3 text-slate-700">{item.email}</td>
                     <td className="px-4 py-3 text-slate-700">{item.website || '-'}</td>
-                    <td className="px-4 py-3 text-slate-700 max-w-7xl whitespace-pre-wrap">{item.pertanyaan || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700 whitespace-pre-wrap w-[40%] min-w-[480px] align-top">
+                      {item.pertanyaan || '-'}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${
@@ -284,7 +296,7 @@ const BadanPublik = () => {
                 className="text-slate-500 hover:text-slate-800 text-xl font-bold"
                 aria-label="Tutup"
               >
-                Į-
+                ×
               </button>
             </div>
             <form onSubmit={saveForm} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -376,14 +388,14 @@ const BadanPublik = () => {
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Import CSV/Excel</h2>
                 <p className="text-sm text-slate-600">
-                  Ikuti struktur header: {expectedHeaders.join(', ')}
+                  Ikuti struktur header: {expectedHeaders.join(', ')}. Kolom Email opsional/ boleh kosong.
                 </p>
               </div>
               <button
                 onClick={() => setImportOpen(false)}
                 className="text-slate-500 hover:text-slate-800 text-xl font-bold"
               >
-                Į-
+                ×
               </button>
             </div>
 

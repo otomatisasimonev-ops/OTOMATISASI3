@@ -49,7 +49,7 @@ const Login = () => {
               required
               autoComplete="current-password"
               className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="••••••••"
+              placeholder="********"
             />
           </div>
           {error && <div className="text-sm text-rose-500">{error}</div>}

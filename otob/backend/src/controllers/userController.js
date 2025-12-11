@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
-const { User } = require('../models');
+const { Op } = require('sequelize');
+const { User, Assignment, AssignmentHistory, SmtpConfig, EmailLog, QuotaRequest } = require('../models');
 
 // Admin-only: create user with role default "user"
 const createUser = async (req, res) => {
@@ -62,5 +63,44 @@ const getMe = async (req, res) => {
 module.exports = {
   createUser,
   listUsers,
-  getMe
+  getMe,
+  deleteUser: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = Number(id);
+
+      if (!userId || Number.isNaN(userId)) {
+        return res.status(400).json({ message: 'ID user tidak valid' });
+      }
+
+      if (userId === req.user.id) {
+        return res.status(400).json({ message: 'Tidak bisa menghapus akun sendiri' });
+      }
+
+      const user = await User.findByPk(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User tidak ditemukan' });
+      }
+
+      // Hapus penugasan dan histori terkait user ini
+      await Assignment.destroy({ where: { user_id: userId } });
+      await AssignmentHistory.destroy({
+        where: {
+          [Op.or]: [{ user_id: userId }, { actor_id: userId }]
+        }
+      });
+
+      // Hapus konfigurasi/kuota/log terkait user ini agar FK tidak menolak
+      await SmtpConfig.destroy({ where: { user_id: userId } });
+      await QuotaRequest.destroy({ where: { user_id: userId } });
+      await EmailLog.destroy({ where: { user_id: userId } });
+
+      await user.destroy();
+
+      return res.json({ message: 'User dihapus. Penugasan di-reset dan email log terkait dihapus.' });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Gagal menghapus user' });
+    }
+  }
 };

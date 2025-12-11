@@ -19,9 +19,13 @@ module.exports = (sequelize) => {
       },
       email: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
+        defaultValue: null,
         validate: {
-          isEmail: true
+          isEmail: {
+            args: true,
+            msg: 'Email tidak valid'
+          }
         }
       },
       website: {

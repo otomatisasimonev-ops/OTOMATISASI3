@@ -15,8 +15,9 @@ const extractPlaceholders = (subject, body) => {
   const set = new Set();
   const regex = /{{\s*([\w.]+)\s*}}/g;
   [subject, body].forEach((tpl) => {
-    let match;
     const content = tpl || '';
+    let match;
+    regex.lastIndex = 0;
     while ((match = regex.exec(content))) {
       set.add(match[1]);
     }

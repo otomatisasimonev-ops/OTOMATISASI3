@@ -8,8 +8,8 @@ const SuccessModal = ({ info, onClose }) => {
           {info.message} ke {info.total} penerima.
         </p>
         <ul className="text-sm text-slate-600 space-y-1 mb-4">
-          <li>• Lampiran KTP: {info.attachment ? 'terikut' : 'tidak ada'}</li>
-          <li>• Template otomatis sudah menyesuaikan nama badan publik.</li>
+          <li>- Lampiran KTP: {info.attachment ? 'terikut' : 'tidak ada'}</li>
+          <li>- Template otomatis sudah menyesuaikan nama badan publik.</li>
         </ul>
         <button
           onClick={onClose}

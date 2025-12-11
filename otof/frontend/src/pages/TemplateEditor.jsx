@@ -7,6 +7,8 @@ const AUTOSAVE_DELAY = 800;
 
 const TemplateEditor = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const canEdit = isAdmin;
   const roleKey = user?.role ? `customTemplates:${user.role}` : 'customTemplates';
   const versionKey = (id) => `templateVersions:${id}:${user?.role || 'anon'}`;
   const draftKey = (id) => `templateDraft:${id}:${user?.role || 'anon'}`;
@@ -130,16 +132,19 @@ const TemplateEditor = () => {
   });
 
   const updateField = (setter) => (value) => {
+    if (!canEdit) return;
     pushHistory();
     setter(value);
   };
 
   const pushHistory = () => {
+    if (!canEdit) return;
     setHistory((prev) => [...prev, snapshot()].slice(-50));
     setFuture([]);
   };
 
   const handleUndo = () => {
+    if (!canEdit) return;
     setHistory((prev) => {
       if (!prev.length) return prev;
       const last = prev[prev.length - 1];
@@ -153,6 +158,7 @@ const TemplateEditor = () => {
   };
 
   const handleRedo = () => {
+    if (!canEdit) return;
     setFuture((prev) => {
       if (!prev.length) return prev;
       const next = prev[0];
@@ -166,6 +172,7 @@ const TemplateEditor = () => {
   };
 
   const saveTemplate = () => {
+    if (!canEdit) return;
     if (!name.trim() || !subject.trim() || !body.trim()) {
       setToast('Nama, subjek, dan body wajib diisi.');
       return;
@@ -199,6 +206,7 @@ const TemplateEditor = () => {
     setConfirmingSave(false);
   };
   const handleSaveClick = () => {
+    if (!canEdit) return;
     setConfirmingSave(true);
   };
 
@@ -212,11 +220,12 @@ const TemplateEditor = () => {
       : 'Simpan untuk membuat template baru.';
 
   const handleDelete = () => {
+    if (!canEdit) return;
     if (!isDeletable) {
       setToast('Template bawaan tidak bisa dihapus, hanya dapat diubah atau di-override.');
       return;
     }
-    const confirm = window.confirm('Hapus template ini?');
+    const confirm = window.confirm('Hapus template inix');
     if (!confirm) return;
     setCustomTemplates((prev) => {
       const updated = prev.filter((t) => t.id !== selectedTemplateId);
@@ -248,6 +257,7 @@ const TemplateEditor = () => {
   };
 
   const handleRestoreVersion = (ver) => {
+    if (!canEdit) return;
     setName(ver.name);
     setDescription(ver.description || '');
     setSubject(ver.subject);
@@ -256,6 +266,7 @@ const TemplateEditor = () => {
   };
 
   useEffect(() => {
+    if (!canEdit) return;
     // autosave debounce
     const state = snapshot();
     if (autosaveTimer.current) {
@@ -299,13 +310,20 @@ const TemplateEditor = () => {
             <p className="text-sm text-slate-600 mt-1">
               Pilih template, edit isi dan placeholder, simpan sebagai kustom, atau hapus jika tidak terpakai.
             </p>
+            {!canEdit && (
+              <p className="text-xs font-semibold text-amber-700 mt-2">
+                Mode lihat saja. Hanya admin yang bisa mengedit atau menyimpan template.
+              </p>
+            )}
           </div>
-          <button
-            onClick={() => setSelectedTemplateId('new')}
-            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold shadow-soft hover:bg-slate-800"
-          >
-            + Draft baru
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => setSelectedTemplateId('new')}
+              className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold shadow-soft hover:bg-slate-800"
+            >
+              + Draft baru
+            </button>
+          )}
         </div>
       </div>
 
@@ -317,16 +335,18 @@ const TemplateEditor = () => {
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">{templates.length} template</span>
-            <button
-              onClick={() => setSelectedTemplateId('new')}
-              className={`px-3 py-2 rounded-xl border text-sm font-semibold ${
-                selectedTemplateId === 'new'
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-slate-200 text-slate-700 hover:border-primary/50'
-              }`}
-            >
-              + Template Baru
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => setSelectedTemplateId('new')}
+                className={`px-3 py-2 rounded-xl border text-sm font-semibold ${
+                  selectedTemplateId === 'new'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-slate-200 text-slate-700 hover:border-primary/50'
+                }`}
+              >
+                + Template Baru
+              </button>
+            )}
           </div>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
@@ -365,74 +385,77 @@ const TemplateEditor = () => {
               </h2>
               <p className="text-xs text-slate-500">Simpan untuk membuat/overwrite template kustom.</p>
             </div>
-            <div className="flex flex-col items-end gap-2 w-full">
-              <div className="flex gap-2 flex-wrap items-center justify-end">
-                <button
-                  onClick={handleUndo}
-                  disabled={!history.length}
-                  className={`px-3 py-1.5 rounded-xl border text-sm ${
-                    history.length ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-100 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  Undo
-                </button>
-                <button
-                  onClick={handleRedo}
-                  disabled={!future.length}
-                  className={`px-3 py-1.5 rounded-xl border text-sm ${
-                    future.length ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-100 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  Redo
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={!isDeletable}
-                  className={`px-3 py-1.5 rounded-xl border text-sm ${
-                    isDeletable
-                      ? 'border-rose-200 text-rose-700 hover:bg-rose-50'
-                      : 'border-slate-200 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  Hapus
-                </button>
-                <button
-                  onClick={handleReset}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
-                >
-                  Reset
-                </button>
-                <button
-                  onClick={handleSaveClick}
-                  className="px-3.5 py-1.5 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 text-sm"
-                >
-                  Simpan
-                </button>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap justify-end min-h-[32px]">
-                {toast && (
-                  <span className="text-sm px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700">
-                    {toast}
+              <div className="flex flex-col items-end gap-2 w-full">
+              {canEdit && (
+                <div className="flex gap-2 flex-wrap items-center justify-end">
+                  <button
+                    onClick={handleUndo}
+                    disabled={!history.length}
+                    className={`px-3 py-1.5 rounded-xl border text-sm ${
+                      history.length ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-100 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Undo
+                  </button>
+                  <button
+                    onClick={handleRedo}
+                    disabled={!future.length}
+                    className={`px-3 py-1.5 rounded-xl border text-sm ${
+                      future.length ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-100 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Redo
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={!isDeletable}
+                    className={`px-3 py-1.5 rounded-xl border text-sm ${
+                      isDeletable
+                        ? 'border-rose-200 text-rose-700 hover:bg-rose-50'
+                        : 'border-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Hapus
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={handleSaveClick}
+                    className="px-3.5 py-1.5 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 text-sm"
+                  >
+                    Simpan
+                  </button>
+                </div>
+              )}
+                <div className="flex items-center gap-2 flex-wrap justify-end min-h-[32px]">
+                  {toast && (
+                    <span className="text-sm px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700">
+                      {toast}
+                    </span>
+                  )}
+                  <span
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-xl border ${
+                      overwriteWarning.includes('menimpa')
+                        ? 'bg-amber-50 border-amber-200 text-amber-700'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {canEdit ? overwriteWarning : 'Hanya admin yang bisa menyimpan/ubah template'}
                   </span>
-                )}
-                <span
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-xl border ${
-                    overwriteWarning.includes('menimpa')
-                      ? 'bg-amber-50 border-amber-200 text-amber-700'
-                      : 'bg-slate-50 border-slate-200 text-slate-600'
-                  }`}
-                >
-                  {overwriteWarning}
-                </span>
+                </div>
               </div>
             </div>
-          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-700">Nama template</label>
               <input
                 value={name}
+                readOnly={!canEdit}
                 onChange={(e) => updateField(setName)(e.target.value)}
                 className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
               />
@@ -441,6 +464,7 @@ const TemplateEditor = () => {
               <label className="text-xs font-semibold text-slate-700">Deskripsi</label>
               <input
                 value={description}
+                readOnly={!canEdit}
                 onChange={(e) => updateField(setDescription)(e.target.value)}
                 className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Opsional"
@@ -451,6 +475,7 @@ const TemplateEditor = () => {
             <label className="text-xs font-semibold text-slate-700">Subjek</label>
             <input
               value={subject}
+              readOnly={!canEdit}
               onChange={(e) => updateField(setSubject)(e.target.value)}
               className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
             />
@@ -459,6 +484,7 @@ const TemplateEditor = () => {
             <label className="text-xs font-semibold text-slate-700">Body</label>
             <textarea
               value={body}
+              readOnly={!canEdit}
               onChange={(e) => updateField(setBody)(e.target.value)}
               className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm leading-6"
               rows={14}
@@ -552,7 +578,10 @@ const TemplateEditor = () => {
                   <div className="text-xs text-slate-600 line-clamp-2">{ver.subject}</div>
                   <button
                     onClick={() => handleRestoreVersion(ver)}
-                    className="text-xs font-semibold text-primary hover:underline"
+                    disabled={!canEdit}
+                    className={`text-xs font-semibold ${
+                      canEdit ? 'text-primary hover:underline' : 'text-slate-400 cursor-not-allowed'
+                    }`}
                   >
                     Pulihkan versi ini
                   </button>
@@ -564,12 +593,12 @@ const TemplateEditor = () => {
       </div>
     </div>
 
-      {confirmingSave && (
+      {canEdit && confirmingSave && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3 border border-slate-100">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Simpan template?</h3>
+                <h3 className="text-lg font-bold text-slate-900">Simpan templatex</h3>
                 <p className="text-sm text-slate-600">
                   Perubahan akan {overwriteWarning.includes('menimpa') ? 'menimpa template ini.' : 'membuat template baru.'}
                 </p>
@@ -579,7 +608,7 @@ const TemplateEditor = () => {
                 className="text-slate-500 hover:text-slate-800 text-xl font-bold"
                 aria-label="Tutup"
               >
-                ×
+                Ã—
               </button>
             </div>
             <div className="flex items-center gap-2">
@@ -603,3 +632,4 @@ const TemplateEditor = () => {
   );
 };
 
+export default TemplateEditor;

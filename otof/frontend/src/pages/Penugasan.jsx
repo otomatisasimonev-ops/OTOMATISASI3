@@ -53,7 +53,7 @@ const Penugasan = () => {
           keepSelection &&
           currentSelectedId &&
           userList.some((u) => u.id.toString() === currentSelectedId);
-        const nextSelected = stillValid - currentSelectedId : firstUser?.id?.toString() || '';
+        const nextSelected = stillValid ? currentSelectedId : firstUser?.id?.toString() || '';
         setSelectedUserId(nextSelected);
 
         if (!nextSelected) {
@@ -104,7 +104,7 @@ const Penugasan = () => {
   }
 
   const toggleAssign = (id) => {
-    setAssignedIds((prev) => (prev.includes(id) - prev.filter((x) => x !== id) : [...prev, id]));
+    setAssignedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const toggleAll = () => {
@@ -153,7 +153,8 @@ const Penugasan = () => {
   const totalPages = Math.max(1, Math.ceil(filteredBadan.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagedBadan = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
+    const safePage = Math.max(1, currentPage);
+    const start = (safePage - 1) * pageSize;
     return filteredBadan.slice(start, start + pageSize);
   }, [filteredBadan, currentPage]);
 
@@ -191,7 +192,7 @@ const Penugasan = () => {
     setActioningId(reqId);
     try {
       await api.patch(`/quota/requests/${reqId}`, { status });
-      const verb = status === 'approved' - 'disetujui' : 'ditolak';
+      const verb = status === 'approved' ? 'disetujui' : 'ditolak';
       setToast({ message: `Permintaan kuota ${verb}`, type: 'success' });
       await refreshData(true, selectedUserId);
     } catch (err) {
@@ -250,13 +251,13 @@ const Penugasan = () => {
                     onClick={() => setSelectedUserId(u.id.toString())}
                     className={`px-3 py-2 rounded-xl cursor-pointer border transition-all ${
                       selectedUserId === u.id.toString()
-                        - 'border-primary bg-emerald-50 text-emerald-700'
+                        ? 'border-primary bg-emerald-50 text-emerald-700'
                         : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-primary/50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="font-semibold">{u.username}</div>
-                      {pendingByUser[u.id] - (
+                      {pendingByUser[u.id] ? (
                         <span className="text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
                           {pendingByUser[u.id]} req
                         </span>
@@ -283,7 +284,7 @@ const Penugasan = () => {
                 {pendingRequests.length} menunggu
               </span>
             </div>
-            {pendingRequests.length === 0 - (
+            {pendingRequests.length === 0 ? (
               <div className="text-xs text-amber-700">Belum ada permintaan.</div>
             ) : (
               <div className="space-y-2 max-h-60 overflow-auto">
@@ -332,7 +333,7 @@ const Penugasan = () => {
                 </p>
               </div>
               <div className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm border border-slate-200">
-                {selectedUserId - `${assignedIds.length} ditugaskan` : 'Pilih user dulu'}
+                {selectedUserId ? `${assignedIds.length} ditugaskan` : 'Pilih user dulu'}
               </div>
             </div>
 
@@ -363,14 +364,14 @@ const Penugasan = () => {
                   onClick={toggleAll}
                   className="px-4 py-3 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
                 >
-                  {assignedIds.length === badan.length && badan.length > 0 - 'Batal pilih semua' : 'Pilih semua'}
+                  {assignedIds.length === badan.length && badan.length > 0 ? 'Batal pilih semua' : 'Pilih semua'}
                 </button>
                 <button
                   onClick={saveAssign}
                   disabled={saving}
                   className="px-5 py-3 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60"
                 >
-                  {saving - 'Menyimpan...' : 'Simpan Penugasan'}
+                  {saving ? 'Menyimpan...' : 'Simpan Penugasan'}
                 </button>
               </div>
             </div>
@@ -401,13 +402,13 @@ const Penugasan = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {loading - (
+                  {loading ? (
                     <tr>
                       <td className="px-4 py-6 text-center text-slate-500" colSpan={4}>
                         Memuat data...
                       </td>
                     </tr>
-                  ) : filteredBadan.length === 0 - (
+                  ) : filteredBadan.length === 0 ? (
                     <tr>
                       <td className="px-4 py-6 text-center text-slate-500" colSpan={4}>
                         Tidak ada data / tidak cocok dengan pencarian.
@@ -417,7 +418,7 @@ const Penugasan = () => {
                     pagedBadan.map((item, idx) => (
                       <tr
                         key={item.id}
-                        className={`border-t border-slate-100 ${idx % 2 === 0 - 'bg-white' : 'bg-slate-50/60'}`}
+                        className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                       >
                         <td className="px-4 py-3">
                           <input
@@ -429,7 +430,7 @@ const Penugasan = () => {
                         <td className="px-4 py-3 font-semibold text-slate-900">{item.nama_badan_publik}</td>
                         <td className="px-4 py-3 text-slate-700">{item.email}</td>
                         <td className="px-4 py-3 text-slate-700">
-                          {assignmentsMap[item.id] - assignmentsMap[item.id] : 'Belum ditugaskan'}
+                          {assignmentsMap[item.id] ? assignmentsMap[item.id] : 'Belum ditugaskan'}
                         </td>
                       </tr>
                     ))
@@ -482,7 +483,7 @@ const Penugasan = () => {
               </tr>
             </thead>
             <tbody>
-              {badanSummary.length === 0 - (
+              {badanSummary.length === 0 ? (
                 <tr>
                   <td className="px-4 py-4 text-center text-slate-500" colSpan={3}>
                     Belum ada data badan publik.
@@ -492,12 +493,12 @@ const Penugasan = () => {
                 badanSummary.map((b, idx) => (
                   <tr
                     key={b.id}
-                    className={`border-t border-slate-100 ${idx % 2 === 0 - 'bg-white' : 'bg-slate-50/60'}`}
+                    className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                   >
                     <td className="px-4 py-3 font-semibold text-slate-900">{b.nama_badan_publik}</td>
                     <td className="px-4 py-3 text-slate-700">{b.kategori}</td>
                     <td className="px-4 py-3 text-slate-700">
-                      {b.assignedTo - b.assignedTo : 'Belum ditugaskan'}
+                      {b.assignedTo ? b.assignedTo : 'Belum ditugaskan'}
                     </td>
                   </tr>
                 ))
@@ -529,7 +530,7 @@ const Penugasan = () => {
               </tr>
             </thead>
             <tbody>
-              {history.length === 0 - (
+              {history.length === 0 ? (
                 <tr>
                   <td className="px-3 py-3 text-center text-slate-500" colSpan={5}>
                     Belum ada histori.

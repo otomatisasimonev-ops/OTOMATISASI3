@@ -134,44 +134,51 @@ const importBadanPublik = async (req, res) => {
 
     // normalisasi dan filter invalid
     const cleaned = records
-      .map((r) => ({
-        nama_badan_publik: r.nama_badan_publik || r.Nama || r.nama || '',
-        kategori: r.kategori || r.Kategori || '',
-        email: r.email || r.Email || '',
-        website: r.website || r.Website || '',
-        pertanyaan: r.pertanyaan || r.Pertanyaan || '',
-        status: r.status || r.Status || 'pending',
-        thread_id: r.thread_id || r['Thread Id'] || r.ThreadId || null,
-        sent_count: 0
-      }))
-      .filter((r) => r.nama_badan_publik && r.kategori && r.email && isValidEmail(r.email));
+      .map((r) => {
+        const rawEmail = r.email || r.Email || '';
+        const email = isValidEmail(rawEmail) ? rawEmail : null;
+        return {
+          nama_badan_publik: (r.nama_badan_publik || r.Nama || r.nama || '').trim(),
+          kategori: (r.kategori || r.Kategori || '').trim(),
+          email,
+          website: (r.website || r.Website || '').trim() || null,
+          pertanyaan: (r.pertanyaan || r.Pertanyaan || '').trim() || null,
+          status: (r.status || r.Status || 'pending').trim() || 'pending',
+          thread_id: r.thread_id || r['Thread Id'] || r.ThreadId || null,
+          sent_count: 0
+        };
+      })
+      .filter((r) => r.nama_badan_publik && r.kategori);
 
     // deduplikasi by email (case-insensitive)
+    const withEmail = cleaned.filter((r) => r.email);
+    const withoutEmail = cleaned.filter((r) => !r.email);
     const uniqueMap = new Map();
-    cleaned.forEach((row) => {
+    withEmail.forEach((row) => {
       const key = row.email.toLowerCase();
       if (!uniqueMap.has(key)) uniqueMap.set(key, row);
     });
-    const uniqueRows = Array.from(uniqueMap.values());
+    const uniqueEmailRows = Array.from(uniqueMap.values());
 
     // exclude existing emails in DB
     const { Op } = require('sequelize');
-    const existing = uniqueRows.length
+    const existing = uniqueEmailRows.length
       ? await BadanPublik.findAll({
-          where: { email: { [Op.in]: uniqueRows.map((r) => r.email) } },
+          where: { email: { [Op.in]: uniqueEmailRows.map((r) => r.email) } },
           attributes: ['email']
         })
       : [];
     const existingSet = new Set(existing.map((e) => e.email.toLowerCase()));
-    const finalRows = uniqueRows.filter((r) => !existingSet.has(r.email.toLowerCase()));
+    const finalWithEmail = uniqueEmailRows.filter((r) => !existingSet.has(r.email.toLowerCase()));
+    const finalRows = [...withoutEmail, ...finalWithEmail];
 
     if (finalRows.length === 0) {
-      return res.status(400).json({ message: 'Tidak ada baris valid (nama/kategori/email wajib, dedupe email)' });
+      return res.status(400).json({ message: 'Tidak ada baris valid (nama & kategori wajib). Email boleh kosong.' });
     }
 
     await BadanPublik.bulkCreate(finalRows);
     return res.json({
-      message: `Import berhasil: ${finalRows.length} masuk, ${uniqueRows.length - finalRows.length} duplikat/terdaftar dilewati`
+      message: `Import berhasil: ${finalRows.length} masuk, ${withEmail.length - finalWithEmail.length} duplikat email dilewati`
     });
   } catch (err) {
     console.error(err);

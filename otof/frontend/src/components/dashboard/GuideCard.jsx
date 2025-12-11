@@ -7,7 +7,7 @@ const GuideCard = ({ visible, onClose }) => {
         className="absolute top-3 right-3 text-slate-500 hover:text-slate-800 text-lg font-bold"
         aria-label="Tutup panduan"
       >
-        ×
+        ?
       </button>
       <div className="flex flex-col md:flex-row md:items-center gap-3 pr-8">
         <div className="px-3 py-1 rounded-full bg-primary text-white text-xs font-semibold w-max">Panduan Cepat</div>
