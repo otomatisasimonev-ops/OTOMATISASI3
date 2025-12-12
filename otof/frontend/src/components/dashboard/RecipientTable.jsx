@@ -5,6 +5,18 @@ const isValidEmail = (val) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 };
 
+const truncateQuestion = (text, max = 64) => {
+  if (!text) return '';
+  const cleaned = String(text || '').trim();
+  if (cleaned.length <= max) return cleaned;
+  const sliced = cleaned.slice(0, max);
+  const lastSpace = sliced.lastIndexOf(' ');
+  if (lastSpace > 0) {
+    return `${sliced.slice(0, lastSpace).trim()}...`;
+  }
+  return `${sliced.trim()}...`;
+};
+
 const RecipientTable = ({
   badan,
   selectedIds,
@@ -91,10 +103,10 @@ const RecipientTable = ({
           </select>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="bg-gradient-to-r from-slate-50 to-white text-slate-600">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-[12px]">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-white text-slate-600">
               <th className="px-4 py-3">
                 <input
                   type="checkbox"
@@ -102,12 +114,12 @@ const RecipientTable = ({
                   onChange={toggleAll}
                 />
               </th>
-              <th className="px-4 py-3 text-left">Nama</th>
-              <th className="px-4 py-3 text-left">Kategori</th>
-              <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Pertanyaan</th>
-              <th className="px-4 py-3 text-left">Sent</th>
-              <th className="px-4 py-3 text-left">Tenggat</th>
+              <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">Nama</th>
+              <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">Kategori</th>
+              <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">Email</th>
+              <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">Pertanyaan</th>
+              <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">Sent</th>
+              <th className="px-4 py-3 text-left text-[10px] uppercase tracking-[0.08em]">Tenggat</th>
             </tr>
           </thead>
           <tbody>
@@ -151,24 +163,29 @@ const RecipientTable = ({
                         title={!emailValid ? 'Email kosong / tidak valid' : undefined}
                       />
                     </td>
-                    <td className="px-4 py-3 font-semibold text-slate-900">{item.nama_badan_publik}</td>
-                    <td className="px-4 py-3 text-slate-700">{item.kategori}</td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="px-4 py-3 font-semibold text-[12px] text-slate-900">{item.nama_badan_publik}</td>
+                    <td className="px-4 py-3 text-[12px] text-slate-700">{item.kategori}</td>
+                    <td className="px-4 py-3 text-[12px] text-slate-700">
                       {emailValid ? item.email : <span className="text-slate-400 italic">Tidak ada email</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-700 max-w-3xl whitespace-pre-wrap">{item.pertanyaan}</td>
-                    <td className="px-4 py-3 text-slate-700">{item.sent_count}</td>
-                    <td className="px-4 py-3 text-slate-700 space-y-2 min-w-[220px]">
-                      <div className="text-xs text-slate-600">
-                        Tanggal kirim:{' '}
-                        <span className="font-semibold text-slate-800">{startDate || '-'}</span>
+                    <td
+                      className="px-4 py-3 text-[12px] text-slate-700 max-w-[220px] overflow-hidden whitespace-nowrap text-ellipsis"
+                      title={item.pertanyaan || '-'}
+                    >
+                      {truncateQuestion(item.pertanyaan, 64) || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-slate-700">{item.sent_count}</td>
+                    <td className="px-3 py-2 text-[9px] text-slate-700 min-w-[220px]">
+                      <div className="leading-snug text-slate-600">
+                        <span className="font-semibold text-slate-800">Tanggal kirim</span>:{' '}
+                        <span>{startDate || '-'}</span>
                       </div>
-                      <div className="text-xs text-slate-600">
-                        Jatuh tempo:{' '}
-                        <span className="font-semibold text-slate-800">{dueInfo.dueDateLabel || '-'}</span>{' '}
+                      <div className="leading-snug text-slate-600">
+                        <span className="font-semibold text-slate-800">Jatuh tempo</span>:{' '}
+                        <span>{dueInfo.dueDateLabel || '-'}</span>{' '}
                         {dueInfo.daysLeft != null && dueInfo.dueDateLabel && (
                           <span className={dueInfo.overdue ? 'text-rose-600' : 'text-slate-600'}>
-                            ({dueInfo.daysLeft} hari lagi)
+                            ({dueInfo.daysLeft} hari)
                           </span>
                         )}
                       </div>

@@ -63,7 +63,7 @@ const QuoteCard = ({ quotes = [], badge = 'Transparansi', title = 'Kutipan keter
   }, [clearQuoteTimers, currentQuote, shuffleQuote, fallback]);
 
   return (
-    <div className="relative rounded-2xl border border-slate-200 border-l-4 border-primary/20 bg-white shadow-soft p-3 lg:col-span-2">
+    <div className="relative rounded-2xl border border-slate-200 border-l-4 border-primary/20 bg-white shadow-soft p-3 lg:col-span-2 h-[160px] overflow-hidden">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/10">

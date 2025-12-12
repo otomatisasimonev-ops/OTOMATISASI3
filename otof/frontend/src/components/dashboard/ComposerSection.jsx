@@ -143,32 +143,46 @@ const ComposerSection = ({
             )}
             <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-slate-700">Lampiran KTP (wajib)</label>
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
-              <label className="border-2 border-dashed border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:border-primary hover:bg-primary/5 transition">
-                <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFile} />
-                <span className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold">Pilih File</span>
-                <span className="text-sm text-slate-700">
-                  {attachment?.filename || 'Unggah KTP (jpg/png/pdf, maks 2MB)'}
-                </span>
-              </label>
-              {attachmentInfo && (
-                <span className="text-xs px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700">
-                  {attachmentInfo}
-                </span>
-              )}
-              <div className="text-[11px] text-slate-500">
-                KTP hanya digunakan untuk verifikasi permohonan dan tidak dibagikan ke pihak lain.
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="border-2 border-dashed border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:border-primary hover:bg-primary/5 transition">
+                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFile} />
+                    <span className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold">Pilih File</span>
+                    <span className="text-sm text-slate-700">
+                      {attachment?.filename || 'Unggah KTP (jpg/png/pdf, maks 2MB)'}
+                    </span>
+                  </label>
+                  {attachmentInfo && (
+                    <span className="text-xs px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700">
+                      {attachmentInfo}
+                    </span>
+                  )}
+                  {!attachmentPreview && (
+                    <span className="text-[11px] text-slate-500">
+                      KTP hanya digunakan untuk verifikasi permohonan dan tidak dibagikan ke pihak lain.
+                    </span>
+                  )}
+                </div>
+                {attachmentPreview && (
+                  <div className="text-[11px] text-slate-500 mt-2">
+                    KTP hanya digunakan untuk verifikasi permohonan dan tidak dibagikan ke pihak lain.
+                  </div>
+                )}
               </div>
-              {attachmentPreview && attachmentPreview.type?.startsWith('image/') && (
-                <div className="w-32 h-32 rounded-xl overflow-hidden border border-slate-200 shadow-soft">
-                  <img src={attachmentPreview.url} alt="Preview KTP" className="w-full h-full object-cover" />
-                </div>
-              )}
-              {attachmentPreview && attachmentPreview.type?.includes('pdf') && (
-                <div className="w-48 h-40 border border-slate-200 rounded-xl overflow-hidden shadow-soft bg-slate-50">
-                  <embed src={attachmentPreview.url} type="application/pdf" className="w-full h-full" />
-                </div>
-              )}
+              <div className="w-64 h-40 border border-dashed border-slate-200 rounded-xl flex items-center justify-center bg-slate-50 shadow-soft">
+                {attachmentPreview ? (
+                  attachmentPreview.type?.startsWith('image/') ? (
+                    <img src={attachmentPreview.url} alt="Preview KTP" className="w-full h-full object-cover rounded-xl" />
+                  ) : (
+                    <embed src={attachmentPreview.url} type="application/pdf" className="w-full h-full" />
+                  )
+                ) : (
+                  <span className="text-xs text-slate-500 px-4 text-center">
+                    Preview akan muncul di sini
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

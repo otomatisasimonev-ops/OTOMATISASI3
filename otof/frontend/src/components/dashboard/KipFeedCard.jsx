@@ -10,13 +10,22 @@ const KipFeedCard = ({ intervalMs = 10000, compact = true, cardHeight = 'h-[160p
   const fadeTimeoutRef = useRef(null);
   const intervalRef = useRef(null);
 
+  const shuffleArray = (array) => {
+    const copy = array.slice();
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+
   const loadNews = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const res = await api.get('/news/kip');
       const data = res.data || [];
-      setItems(data);
+      setItems(shuffleArray(data));
       setIndex(0);
     } catch (err) {
       setItems([]);
