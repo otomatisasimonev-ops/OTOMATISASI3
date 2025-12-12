@@ -55,10 +55,29 @@ const KipFeedCard = ({ intervalMs = 10000, compact = true, cardHeight = 'h-[160p
   const toSummarySnippet = (text) => {
     if (!text) return '';
     const cleaned = String(text).replace(/\s+/g, ' ').trim();
-    const matches = cleaned.match(/[^.!?]+[.!?]+/g);
-    let snippet = matches && matches.length ? matches[0].trim() : cleaned;
-    if (snippet.length > 160) snippet = `${snippet.slice(0, 160).trim()}...`;
-    return snippet;
+    const minLen = 140;
+    const maxLen = 190;
+    if (cleaned.length <= minLen) return cleaned;
+
+    let snippet = cleaned.slice(0, maxLen);
+    if (snippet.length < minLen) snippet = cleaned.slice(0, minLen);
+
+    if (snippet.length < cleaned.length) {
+      const lastSpace = snippet.lastIndexOf(' ');
+      if (lastSpace > minLen - 20) {
+        snippet = snippet.slice(0, lastSpace);
+      }
+    }
+
+    snippet = snippet.trim();
+    if (snippet.length < minLen && cleaned.length >= minLen) {
+      snippet = cleaned.slice(0, Math.min(cleaned.length, minLen)).trim();
+    }
+
+    if (snippet.length > maxLen) snippet = snippet.slice(0, maxLen).trim();
+
+    const needsEllipsis = snippet.length < cleaned.length;
+    return needsEllipsis ? `${snippet}...` : snippet;
   };
 
   const formatDate = (iso) => {
@@ -76,7 +95,7 @@ const KipFeedCard = ({ intervalMs = 10000, compact = true, cardHeight = 'h-[160p
 
   return (
     <div
-      className={`bg-white rounded-2xl border border-slate-200 shadow-soft lg:col-span-2 p-3 space-y-2 ${cardHeight}`}
+      className={`bg-white rounded-2xl border border-slate-200 shadow-soft lg:col-span-2 p-3 space-y-2 ${cardHeight} overflow-hidden`}
     >
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-slate-900">Berita KIP</h2>
