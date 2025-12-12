@@ -10,7 +10,7 @@ import ConfirmModal from '../components/dashboard/ConfirmModal';
 import SuccessModal from '../components/dashboard/SuccessModal';
 import Toast from '../components/Toast';
 import QuoteCard from '../components/dashboard/QuoteCard';
-import StatusCard from '../components/dashboard/StatusCard';
+import KipFeedCard from '../components/dashboard/KipFeedCard';
 import QuotaCard from '../components/dashboard/QuotaCard';
 import AssignmentsCard from '../components/dashboard/AssignmentsCard';
 import DEFAULT_TEMPLATES from '../constants/templates';
@@ -545,9 +545,9 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <QuoteCard quotes={QUOTES} />
-        <StatusCard label="Coming Soon" />
+        <KipFeedCard compact />
       </div>
       {!isAdmin && (
         <QuotaCard quota={quota} quotaRequests={quotaRequests} onRequest={() => setQuotaModal(true)} />
