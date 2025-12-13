@@ -11,6 +11,11 @@ import AddUser from './pages/AddUser';
 import Penugasan from './pages/Penugasan';
 import Tentang from './pages/Tentang';
 import HolidayCalendar from './pages/HolidayCalendar';
+import UjiAksesReports from './pages/UjiAksesReports';
+import UjiAksesReportNew from './pages/UjiAksesReportNew';
+import UjiAksesReportDetail from './pages/UjiAksesReportDetail';
+import AdminUjiAksesReports from './pages/AdminUjiAksesReports';
+import AdminUjiAksesReportDetail from './pages/AdminUjiAksesReportDetail';
 
 const App = () => {
   return (
@@ -29,6 +34,13 @@ const App = () => {
             <Route path="/settings" element={<Settings />} />
             <Route path="/tentang" element={<Tentang />} />
             <Route path="/kalender" element={<HolidayCalendar />} />
+
+            <Route path="/laporan/uji-akses" element={<UjiAksesReports />} />
+            <Route path="/laporan/uji-akses/new" element={<UjiAksesReportNew />} />
+            <Route path="/laporan/uji-akses/:id" element={<UjiAksesReportDetail />} />
+
+            <Route path="/admin/laporan/uji-akses" element={<AdminUjiAksesReports />} />
+            <Route path="/admin/laporan/uji-akses/:id" element={<AdminUjiAksesReportDetail />} />
           </Route>
         </Route>
       </Routes>

@@ -11,6 +11,9 @@ const assignmentRoutes = require('./routes/assignmentRoutes');
 const quotaRoutes = require('./routes/quotaRoutes');
 const holidayRoutes = require('./routes/holidayRoutes');
 const newsRoutes = require('./routes/newsRoutes');
+const ujiAksesReportRoutes = require('./routes/ujiAksesReportRoutes');
+const adminUjiAksesReportRoutes = require('./routes/adminUjiAksesReportRoutes');
+const path = require('path');
 
 dotenv.config();
 
@@ -35,6 +38,13 @@ app.use('/assignments', assignmentRoutes);
 app.use('/quota', quotaRoutes);
 app.use('/holidays', holidayRoutes);
 app.use('/news', newsRoutes);
+
+// Static files untuk bukti dukung laporan uji akses
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
+// Modul Laporan Uji Akses
+app.use('/api/reports', ujiAksesReportRoutes);
+app.use('/api/admin/reports', adminUjiAksesReportRoutes);
 
 // Bootstrapping server + koneksi database
 const startServer = async () => {

@@ -7,6 +7,7 @@ const AssignmentModel = require('./assignment');
 const QuotaRequestModel = require('./quotaRequest');
 const AssignmentHistoryModel = require('./assignmentHistory');
 const HolidayModel = require('./holiday');
+const UjiAksesReportModel = require('./ujiAksesReport');
 
 const User = UserModel(sequelize);
 const BadanPublik = BadanPublikModel(sequelize);
@@ -16,6 +17,7 @@ const Assignment = AssignmentModel(sequelize);
 const QuotaRequest = QuotaRequestModel(sequelize);
 const AssignmentHistory = AssignmentHistoryModel(sequelize);
 const Holiday = HolidayModel(sequelize);
+const UjiAksesReport = UjiAksesReportModel(sequelize);
 
 User.hasOne(SmtpConfig, {
   foreignKey: 'user_id',
@@ -50,6 +52,12 @@ AssignmentHistory.belongsTo(User, { foreignKey: 'actor_id', as: 'actor' });
 AssignmentHistory.belongsTo(User, { foreignKey: 'user_id', as: 'assignee' });
 AssignmentHistory.belongsTo(BadanPublik, { foreignKey: 'badan_publik_id', as: 'badanPublik' });
 
+User.hasMany(UjiAksesReport, { foreignKey: 'user_id', as: 'ujiAksesReports' });
+UjiAksesReport.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+BadanPublik.hasMany(UjiAksesReport, { foreignKey: 'badan_publik_id', as: 'ujiAksesReports' });
+UjiAksesReport.belongsTo(BadanPublik, { foreignKey: 'badan_publik_id', as: 'badanPublik' });
+
 module.exports = {
   sequelize,
   User,
@@ -59,5 +67,6 @@ module.exports = {
   Assignment,
   QuotaRequest,
   AssignmentHistory,
-  Holiday
+  Holiday,
+  UjiAksesReport
 };

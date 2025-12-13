@@ -104,6 +104,45 @@ otob/backend/src
 | CRUD | `/holidays`           | `holidayController`         | Daftar hari libur nasional.    |
 | GET  | `/news`               | `newsController`            | Ambil feed RSS eksternal.      |
 
+### Modul Baru: Laporan Uji Akses
+Backend menyimpan laporan uji akses (6 pertanyaan rubrik 2025) lengkap dengan skor per pertanyaan + total, serta bukti dukung (gambar/pdf).
+
+**Endpoint**
+| HTTP | Route | Catatan |
+|------|-------|---------|
+| POST | `/api/reports` | Buat laporan (draft/submitted). |
+| GET | `/api/reports/me` | List laporan milik user login. |
+| GET | `/api/reports/:id` | Detail laporan (user hanya miliknya; admin boleh semua). |
+| PATCH | `/api/reports/:id` | Update draft (jawaban + total otomatis). |
+| PATCH | `/api/reports/:id/submit` | Submit laporan (lock: read-only). |
+| POST | `/api/reports/:id/upload` | Upload bukti per pertanyaan (multipart). |
+| GET | `/api/admin/reports` | List semua laporan (admin-only, filter/sort/search). |
+| GET | `/api/admin/reports/:id` | Detail laporan (admin-only). |
+
+**Contoh payload create (draft)**
+```json
+{
+  "badanPublikId": 1,
+  "status": "draft",
+  "answers": {
+    "q1": { "optionKey": "form_online_tanpa_registrasi", "catatan": "" },
+    "q2": { "optionKey": "tanpa_syarat_tambahan", "catatan": "" },
+    "q3": { "optionKey": "1x24_jam", "catatan": "" },
+    "q4": { "optionKey": "1_10_hari_kerja", "catatan": "" },
+    "q5": { "optionKey": "diberikan_lengkap_sesuai", "catatan": "" },
+    "q6": { "optionKey": "ya", "catatan": "" }
+  }
+}
+```
+
+**Upload bukti (multipart)**
+- Field: `questionKey` (mis. `q1`) dan `files` (bisa multiple), `accept`: `image/*` atau `application/pdf`.
+- File akan dapat diakses via URL `GET /uploads/...`.
+
+**Membuat tabel (opsional)**
+- Project saat ini memakai `sequelize.sync({ alter: true })` sehingga tabel baru otomatis dibuat saat server start.
+- Jika ingin membuat tabel via script: `cd otob/backend && npm run migrate:uji-akses`.
+
 > Detail implementasi setiap controller dapat dilihat pada `otob/backend/src/controllers/*.js`.
 
 ## Frontend `otof`

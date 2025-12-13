@@ -15,23 +15,14 @@ const baseLinks = [
 
 const adminLinks = [
   { to: '/penugasan', label: 'Penugasan', icon: 'clipboard' },
+  { to: '/admin/laporan/uji-akses', label: 'Laporan Uji Akses', icon: 'report' },
   { to: '/users', label: 'Tambah User', icon: 'users' }
 ];
 
 const Sidebar = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const [templateAlert, setTemplateAlert] = useState(false);
   const [pendingQuota, setPendingQuota] = useState(0);
-
-  useEffect(() => {
-    try {
-      const custom = localStorage.getItem(user?.role ? `customTemplates:${user.role}` : 'customTemplates');
-      setTemplateAlert(!custom || custom === '[]');
-    } catch (err) {
-      setTemplateAlert(false);
-    }
-  }, [user?.role]);
 
   useEffect(() => {
     const fetchPending = async () => {
@@ -67,8 +58,14 @@ const Sidebar = () => {
 
   const links =
     user?.role === 'admin'
-      ? [...baseLinks.slice(0, 4), ...adminLinks, ...baseLinks.slice(4)]
-      : baseLinks;
+      ? [
+          ...baseLinks.slice(0, 1),
+          { to: '/laporan/uji-akses', label: 'Laporan Uji Akses (Saya)', icon: 'report' },
+          ...baseLinks.slice(1, 4),
+          ...adminLinks,
+          ...baseLinks.slice(4)
+        ]
+      : [...baseLinks.slice(0, 1), { to: '/laporan/uji-akses', label: 'Laporan Uji Akses', icon: 'report' }, ...baseLinks.slice(1)];
 
   const renderIcon = (name) => {
     const base = 'w-5 h-5 stroke-current';
@@ -139,6 +136,14 @@ const Sidebar = () => {
             <path d="M12 8.5h.01M11 11h2v5h-2z" />
           </svg>
         );
+      case 'report':
+        return (
+          <svg className={base} fill="none" strokeWidth="1.8" viewBox="0 0 24 24">
+            <path d="M7 3h7l3 3v15a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+            <path d="M14 3v4h4" />
+            <path d="M9 11h8M9 15h8M9 19h6" />
+          </svg>
+        );
       default:
         return null;
     }
@@ -171,11 +176,6 @@ const Sidebar = () => {
             <span className="text-sm flex-1">{item.label}</span>
             {item.to === '/penugasan' && pendingQuota > 0 && location.pathname !== '/penugasan' && (
               <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_0_6px_rgba(248,113,113,0.2)]" />
-            )}
-            {item.to === '/templates' && templateAlert && (
-              <span className="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
-                lengkapi
-              </span>
             )}
           </NavLink>
         ))}
