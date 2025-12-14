@@ -23,9 +23,16 @@ const Penugasan = () => {
   const [requests, setRequests] = useState([]);
   const [allAssignments, setAllAssignments] = useState([]);
   const [actioningId, setActioningId] = useState(null);
-  const [history, setHistory] = useState([]);
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState(20);
+  const [baseline, setBaseline] = useState({ ids: [], quota: DEFAULT_QUOTA });
+  const [dirty, setDirty] = useState(false);
+  const [recentlyChanged, setRecentlyChanged] = useState([]);
+  const [selectedRequestIds, setSelectedRequestIds] = useState([]);
+  const [detailRequest, setDetailRequest] = useState(null);
+  const [summaryPage, setSummaryPage] = useState(1);
+  const [summaryPageSize, setSummaryPageSize] = useState(20);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
   const refreshData = useCallback(
     async (keepSelection = true, currentSelectedId = '') => {
@@ -33,12 +40,11 @@ const Penugasan = () => {
       setLoading(true);
       setMessage('');
       try {
-        const [userRes, badanRes, reqRes, assignRes, historyRes] = await Promise.all([
+        const [userRes, badanRes, reqRes, assignRes] = await Promise.all([
           api.get('/users'),
           api.get('/badan-publik'),
           api.get('/quota/requests'),
-          api.get('/assignments'),
-          api.get('/assignments/history/all')
+          api.get('/assignments')
         ]);
 
         const userList = userRes.data || [];
@@ -46,7 +52,6 @@ const Penugasan = () => {
         setBadan(badanRes.data || []);
         setRequests(reqRes.data || []);
         setAllAssignments(assignRes.data || []);
-        setHistory(historyRes.data || []);
 
         const firstUser = userList.find((u) => u.role === 'user');
         const stillValid =
@@ -55,12 +60,11 @@ const Penugasan = () => {
           userList.some((u) => u.id.toString() === currentSelectedId);
         const nextSelected = stillValid ? currentSelectedId : firstUser?.id?.toString() || '';
         setSelectedUserId(nextSelected);
+        setDirty(false);
 
         if (!nextSelected) {
           setAssignedIds([]);
-        } else {
-          const selected = userList.find((u) => u.id.toString() === nextSelected);
-          setQuota(selected?.daily_quota || DEFAULT_QUOTA);
+          setBaseline({ ids: [], quota: DEFAULT_QUOTA });
         }
       } catch (err) {
         console.error(err);
@@ -80,6 +84,7 @@ const Penugasan = () => {
     const fetchAssignment = async () => {
       if (!selectedUserId) {
         setAssignedIds([]);
+        setBaseline({ ids: [], quota: DEFAULT_QUOTA });
         return;
       }
       try {
@@ -87,7 +92,10 @@ const Penugasan = () => {
         const ids = (assignRes.data || []).map((a) => a.badan_publik_id);
         setAssignedIds(ids);
         const selected = users.find((u) => u.id === Number(selectedUserId));
-        setQuota(selected?.daily_quota || DEFAULT_QUOTA);
+        const nextQuota = selected?.daily_quota || DEFAULT_QUOTA;
+        setQuota(nextQuota);
+        setBaseline({ ids, quota: nextQuota });
+        setDirty(false);
       } catch (err) {
         console.error(err);
       }
@@ -102,18 +110,6 @@ const Penugasan = () => {
       </div>
     );
   }
-
-  const toggleAssign = (id) => {
-    setAssignedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
-
-  const toggleAll = () => {
-    if (assignedIds.length === badan.length) {
-      setAssignedIds([]);
-    } else {
-      setAssignedIds(badan.map((b) => b.id));
-    }
-  };
 
   const saveAssign = async () => {
     if (!selectedUserId) {
@@ -131,6 +127,8 @@ const Penugasan = () => {
       setMessage('Penugasan dan kuota disimpan');
       setToast({ message: 'Penugasan dan kuota disimpan', type: 'success' });
       await refreshData(true, selectedUserId);
+      setBaseline({ ids: [...assignedIds], quota: Number(quota) || DEFAULT_QUOTA });
+      setDirty(false);
     } catch (err) {
       const msg = err.response?.data?.message || 'Gagal menyimpan penugasan/kuota';
       setMessage(msg);
@@ -191,6 +189,12 @@ const Penugasan = () => {
       })),
     [assignmentsMap, badan]
   );
+  const summaryTotalPages = Math.max(1, Math.ceil(badanSummary.length / summaryPageSize));
+  const summaryCurrentPage = Math.min(summaryPage, summaryTotalPages);
+  const pagedBadanSummary = useMemo(() => {
+    const start = (summaryCurrentPage - 1) * summaryPageSize;
+    return badanSummary.slice(start, start + summaryPageSize);
+  }, [badanSummary, summaryCurrentPage, summaryPageSize]);
 
   const handleRequestAction = async (reqId, status) => {
     setActioningId(reqId);
@@ -211,6 +215,113 @@ const Penugasan = () => {
   useEffect(() => {
     setPage(1);
   }, [filter]);
+
+  useEffect(() => {
+    setSummaryPage(1);
+  }, [badanSummary.length]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    const sameLength = baseline.ids.length === assignedIds.length;
+    const sameIds = sameLength && baseline.ids.every((id) => assignedIds.includes(id));
+    const sameQuota = Number(baseline.quota) === Number(quota);
+    setDirty(!(sameIds && sameQuota));
+  }, [assignedIds, quota, baseline]);
+
+  const handleSelectUser = (id) => {
+    if (dirty && id.toString() !== selectedUserId) {
+      const confirmLeave = window.confirm('Perubahan belum disimpan. Pindah user dan buang perubahan?');
+      if (!confirmLeave) return;
+    }
+    setSelectedUserId(id.toString());
+    setDirty(false);
+  };
+
+  const resetChanges = () => {
+    setAssignedIds(baseline.ids);
+    setQuota(baseline.quota);
+    setDirty(false);
+    setToast({ message: 'Perubahan penugasan dibatalkan', type: 'info' });
+  };
+
+  const handleSaveClick = () => {
+    if (!selectedUserId) {
+      setMessage('Pilih user terlebih dahulu.');
+      setToast({ message: 'Pilih user terlebih dahulu', type: 'error' });
+      return;
+    }
+    setShowSaveConfirm(true);
+  };
+
+  const markRecentlyChanged = (idOrIds) => {
+    const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+    setRecentlyChanged((prev) => {
+      const merged = Array.from(new Set([...prev, ...ids]));
+      return merged;
+    });
+    setTimeout(() => {
+      setRecentlyChanged((prev) => prev.filter((x) => !ids.includes(x)));
+    }, 2000);
+  };
+
+  const toggleAssign = (id) => {
+    setAssignedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      return next;
+    });
+    markRecentlyChanged(id);
+  };
+
+  const toggleAll = () => {
+    if (assignedIds.length === badan.length) {
+      setAssignedIds([]);
+      markRecentlyChanged(badan.map((b) => b.id));
+    } else {
+      setAssignedIds(badan.map((b) => b.id));
+      markRecentlyChanged(badan.map((b) => b.id));
+    }
+  };
+
+  const toggleRequestSelection = (id) => {
+    setSelectedRequestIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleAllRequests = () => {
+    const ids = filteredPendingRequests.map((r) => r.id);
+    if (selectedRequestIds.length === ids.length) {
+      setSelectedRequestIds([]);
+    } else {
+      setSelectedRequestIds(ids);
+    }
+  };
+
+  const handleBatchAction = async (status) => {
+    if (!selectedRequestIds.length) {
+      setToast({ message: 'Pilih permintaan terlebih dahulu', type: 'error' });
+      return;
+    }
+    setActioningId('batch');
+    try {
+      await Promise.all(selectedRequestIds.map((id) => api.patch(`/quota/requests/${id}`, { status })));
+      const verb = status === 'approved' ? 'disetujui' : 'ditolak';
+      setToast({ message: `${selectedRequestIds.length} permintaan ${verb}`, type: 'success' });
+      setSelectedRequestIds([]);
+      await refreshData(true, selectedUserId);
+      window.dispatchEvent(new Event('quota-requests-updated'));
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Gagal memproses batch';
+      setToast({ message: msg, type: 'error' });
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const filteredPendingRequests = pendingRequests;
 
   return (
     <div className="space-y-4">
@@ -262,7 +373,7 @@ const Penugasan = () => {
                 .map((u) => (
                   <div
                     key={u.id}
-                    onClick={() => setSelectedUserId(u.id.toString())}
+                    onClick={() => handleSelectUser(u.id)}
                     className={`px-3 py-2 rounded-xl cursor-pointer border transition-all ${
                       selectedUserId === u.id.toString()
                         ? 'border-primary bg-emerald-50 text-emerald-700'
@@ -302,23 +413,66 @@ const Penugasan = () => {
                 {pendingRequests.length} menunggu
               </span>
             </div>
-            {pendingRequests.length === 0 ? (
+            {filteredPendingRequests.length === 0 ? (
               <div className="text-xs text-amber-700">Belum ada permintaan.</div>
             ) : (
               <div className="space-y-2 max-h-60 overflow-auto">
-                {pendingRequests.map((r) => (
+                <div className="flex items-center justify-between text-xs text-amber-800">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={
+                        selectedRequestIds.length > 0 &&
+                        selectedRequestIds.length === filteredPendingRequests.length
+                      }
+                      onChange={toggleAllRequests}
+                    />
+                    <span>Pilih semua</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleBatchAction('approved')}
+                      disabled={actioningId === 'batch'}
+                      className="px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      Setujui terpilih
+                    </button>
+                    <button
+                      onClick={() => handleBatchAction('rejected')}
+                      disabled={actioningId === 'batch'}
+                      className="px-3 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 text-xs hover:bg-amber-100 disabled:opacity-60"
+                    >
+                      Tolak terpilih
+                    </button>
+                  </div>
+                </div>
+                {filteredPendingRequests.map((r) => (
                   <div key={r.id} className="p-3 rounded-xl bg-white border border-amber-200">
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <div className="text-sm font-semibold text-slate-800">{r.user?.username}</div>
-                        <p className="text-[11px] text-slate-500">Meminta {r.requested_quota}/hari</p>
+                        <p className="text-[11px] text-slate-500">
+                          Meminta {r.requested_quota}/hari • {new Date(r.createdAt).toLocaleDateString('id-ID')}
+                        </p>
                       </div>
                       <span className="text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
                         pending
                       </span>
                     </div>
-                    {r.reason && <p className="text-xs text-slate-600 mt-1 truncate">Alasan: {r.reason}</p>}
+                    {r.reason && (
+                      <button
+                        onClick={() => setDetailRequest(r)}
+                        className="text-xs text-amber-700 underline mt-1"
+                      >
+                        Lihat detail
+                      </button>
+                    )}
                     <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedRequestIds.includes(r.id)}
+                        onChange={() => toggleRequestSelection(r.id)}
+                      />
                       <button
                         onClick={() => handleRequestAction(r.id, 'approved')}
                         disabled={actioningId === r.id}
@@ -350,8 +504,15 @@ const Penugasan = () => {
                   1) pilih user · 2) checklist badan publik · 3) atur kuota (default 20/hari) · 4) simpan
                 </p>
               </div>
-              <div className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm border border-slate-200">
-                {selectedUserId ? `${assignedIds.length} ditugaskan` : 'Pilih user dulu'}
+              <div className="flex items-center gap-2">
+                {dirty && (
+                  <span className="px-3 py-2 rounded-xl bg-amber-100 text-amber-800 text-sm border border-amber-200">
+                    Perubahan belum disimpan
+                  </span>
+                )}
+                <div className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm border border-slate-200">
+                  {selectedUserId ? `${assignedIds.length} ditugaskan` : 'Pilih user dulu'}
+                </div>
               </div>
             </div>
 
@@ -385,7 +546,14 @@ const Penugasan = () => {
                   {assignedIds.length === badan.length && badan.length > 0 ? 'Batal pilih semua' : 'Pilih semua'}
                 </button>
                 <button
-                  onClick={saveAssign}
+                  onClick={resetChanges}
+                  disabled={!dirty}
+                  className="px-4 py-3 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveClick}
                   disabled={saving}
                   className="px-5 py-3 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60"
                 >
@@ -403,11 +571,43 @@ const Penugasan = () => {
               Dipilih: {assignedIds.length} / {badan.length} | Filter: {filter || '-'}
             </div>
 
+            <div className="flex items-center justify-between text-sm text-slate-600">
+              <div className="flex items-center gap-2">
+                <span>Page size:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setPageSize(next);
+                    setPage(1);
+                  }}
+                  className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+                >
+                  {[10, 20, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>Lompat ke:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={currentPage}
+                  onChange={(e) => setPage(Math.min(totalPages, Math.max(1, Number(e.target.value))))}
+                  className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-sm"
+                />
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-gradient-to-r from-slate-50 to-white text-slate-600">
+                <thead className="bg-gradient-to-r from-slate-50 to-white text-slate-600 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3">
+                    <th className="px-4 py-3 sticky left-0 bg-gradient-to-r from-white to-slate-50 shadow-[4px_0_6px_-4px_rgba(0,0,0,0.1)]">
                       <input
                         type="checkbox"
                         checked={assignedIds.length === badan.length && badan.length > 0}
@@ -436,9 +636,11 @@ const Penugasan = () => {
                     pagedBadan.map((item, idx) => (
                       <tr
                         key={item.id}
-                        className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
+                        className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} ${
+                          recentlyChanged.includes(item.id) ? 'bg-emerald-50/70' : ''
+                        }`}
                       >
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 sticky left-0 bg-inherit">
                           <input
                             type="checkbox"
                             checked={assignedIds.includes(item.id)}
@@ -491,6 +693,44 @@ const Penugasan = () => {
             Total {badan.length} badan publik
           </span>
         </div>
+        <div className="flex items-center justify-between text-sm text-slate-600 mb-2">
+          <div className="flex items-center gap-2">
+            <span>Page size:</span>
+            <select
+              value={summaryPageSize}
+              onChange={(e) => {
+                setSummaryPageSize(Number(e.target.value));
+                setSummaryPage(1);
+              }}
+              className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+            >
+              {[10, 20, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>
+              Halaman {summaryCurrentPage} / {summaryTotalPages}
+            </span>
+            <button
+              onClick={() => setSummaryPage((p) => Math.max(1, p - 1))}
+              disabled={summaryCurrentPage === 1}
+              className="px-3 py-2 rounded-xl border border-slate-200 disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setSummaryPage((p) => Math.min(summaryTotalPages, p + 1))}
+              disabled={summaryCurrentPage === summaryTotalPages}
+              className="px-3 py-2 rounded-xl border border-slate-200 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gradient-to-r from-slate-50 to-white text-slate-600">
@@ -501,14 +741,14 @@ const Penugasan = () => {
               </tr>
             </thead>
             <tbody>
-              {badanSummary.length === 0 ? (
+              {pagedBadanSummary.length === 0 ? (
                 <tr>
                   <td className="px-4 py-4 text-center text-slate-500" colSpan={3}>
                     Belum ada data badan publik.
                   </td>
                 </tr>
               ) : (
-                badanSummary.map((b, idx) => (
+                pagedBadanSummary.map((b, idx) => (
                   <tr
                     key={b.id}
                     className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
@@ -525,50 +765,82 @@ const Penugasan = () => {
           </table>
         </div>
       </div>
-
-      <div className="border border-slate-200 rounded-2xl bg-white p-5 shadow-soft space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-semibold text-slate-800">Histori penugasan</div>
-            <p className="text-xs text-slate-500">Siapa memindah ke siapa (100 log terbaru)</p>
+      {showSaveConfirm && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setShowSaveConfirm(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-800">Simpan penugasan?</div>
+                <p className="text-xs text-slate-500">Perubahan akan diterapkan ke user terpilih.</p>
+              </div>
+              <button
+                onClick={() => setShowSaveConfirm(false)}
+                className="text-slate-500 hover:text-slate-700 text-sm"
+              >
+                Tutup
+              </button>
+            </div>
+            <div className="text-sm text-slate-700 space-y-1">
+              <div>User ID: {selectedUserId || '-'}</div>
+              <div>Total badan publik dipilih: {assignedIds.length}</div>
+              <div>Kuota harian: {quota || DEFAULT_QUOTA}</div>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowSaveConfirm(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+              >
+                Batal
+              </button>
+              <button
+                onClick={async () => {
+                  setShowSaveConfirm(false);
+                  await saveAssign();
+                }}
+                disabled={saving}
+                className="px-4 py-2 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 text-sm"
+              >
+                Ya, simpan
+              </button>
+            </div>
           </div>
-          <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-            {history.length} log
-          </span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left">Waktu</th>
-                <th className="px-3 py-2 text-left">Aktor</th>
-                <th className="px-3 py-2 text-left">User</th>
-                <th className="px-3 py-2 text-left">Badan Publik</th>
-                <th className="px-3 py-2 text-left">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.length === 0 ? (
-                <tr>
-                  <td className="px-3 py-3 text-center text-slate-500" colSpan={5}>
-                    Belum ada histori.
-                  </td>
-                </tr>
-              ) : (
-                history.map((h) => (
-                  <tr key={h.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2">{new Date(h.createdAt).toLocaleString('id-ID')}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-900">{h.actor?.username || '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{h.assignee?.username || '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{h.badanPublik?.nama_badan_publik || '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{h.action}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      )}
+      {detailRequest && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-800">Detail Permintaan Kuota</div>
+                <p className="text-xs text-slate-500">{detailRequest.user?.username}</p>
+              </div>
+              <button
+                onClick={() => setDetailRequest(null)}
+                className="text-slate-500 hover:text-slate-700 text-sm"
+              >
+                Tutup
+              </button>
+            </div>
+            <div className="text-sm text-slate-700 space-y-1">
+              <div>Diminta: {detailRequest.requested_quota} / hari</div>
+              <div>Tanggal: {new Date(detailRequest.createdAt).toLocaleString('id-ID')}</div>
+              <div>Status: {detailRequest.status}</div>
+              <div className="pt-2">
+                <div className="text-xs text-slate-500 mb-1">Alasan</div>
+                <div className="p-3 border border-slate-200 rounded-xl bg-slate-50 min-h-[80px]">
+                  {detailRequest.reason || '-'}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
