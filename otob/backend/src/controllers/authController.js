@@ -1,48 +1,119 @@
 const bcrypt = require('bcrypt');
 const { User } = require('../models');
+const jwt = require('jsonwebtoken');
 
-// Login tanpa JWT: hanya verifikasi kredensial lalu kembalikan profil user
+//Nambah fungsi buat login handler
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username dan password wajib diisi' });
-    }
-
-    const user = await User.findOne({ where: { username } });
-
-    if (!user) {
-      return res.status(401).json({ message: 'Kredensial salah' });
-    }
-
-    // Izinkan password plain atau bcrypt-hash
-    let passwordMatch = user.password === password;
-    if (!passwordMatch) {
-      try {
-        passwordMatch = await bcrypt.compare(password, user.password);
-      } catch (err) {
-        passwordMatch = false;
-      }
-    }
-
-    if (!passwordMatch) {
-      return res.status(401).json({ message: 'Kredensial salah' });
-    }
-
-    return res.json({
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role
-      }
+    const user = await User.findOne({
+      where: {
+        username: username,
+      },
     });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Terjadi kesalahan saat login' });
+
+    if (user) {
+      //Data User itu nanti bakalan dipake buat ngesign token kan
+      // data user dari sequelize itu harus diubah dulu ke bentuk object
+      //Safeuserdata dipake biar lebih dinamis, jadi dia masukin semua data user kecuali data-data sensitifnya  karena bisa didecode kayak password caranya gini :
+      const userPlain = user.toJSON(); // Konversi ke object
+      const { password: _, refresh_token: __, ...safeUserData } = userPlain;
+
+      const decryptPassword = await bcrypt.compare(password, user.password);
+      if (decryptPassword) {
+        const accessToken = jwt.sign(
+          safeUserData,
+          process.env.ACCESS_TOKEN_SECRET,
+          {
+            expiresIn: "30s",
+          }
+        );
+        const refreshToken = jwt.sign(
+          safeUserData,
+          process.env.REFRESH_TOKEN_SECRET,
+          {
+            expiresIn: "1d",
+          }
+        );
+        await User.update({ refresh_token: null }, { where: { id: user.id } });
+        await User.update(
+          { refresh_token: refreshToken },
+          {
+            where: {
+              id: user.id,
+            },
+          }
+        );
+        res.cookie("refreshToken", refreshToken, {
+          httpOnly: true, //ngatur cross-site scripting, untuk penggunaan asli aktifkan karena bisa nyegah serangan fetch data dari website "document.cookies"
+          sameSite: "lax", //ini ngatur domain yg request misal kalo strict cuman bisa akseske link dari dan menuju domain yg sama, lax itu bisa dari domain lain tapi cuman bisa get
+          maxAge: 24 * 60 * 60 * 1000,
+          secure: false, //ini ngirim cookies cuman bisa dari https, kenapa? nyegah skema MITM di jaringan publik, tapi pas development di false in aja
+        });
+        res.status(200).json({
+          status: "Succes",
+          message: "Login Berhasil",
+          safeUserData,
+          accessToken,
+        });
+      } else {
+        res.status(400).json({
+          status: "Failed",
+          message: "Paassword atau email salah",
+        });
+      }
+    } else {
+      res.status(400).json({
+        status: "Failed",
+        message: "Paassword atau email salah",
+      });
+    }
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      status: "error",
+      message: error.message,
+    });
   }
-};
+}
+
+//nambah logout
+const logout = async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+  console.log({ refreshToken });
+
+  // Tidak ada refresh token? Langsung hapus cookie, tidak perlu sentuh DB
+  if (!refreshToken) {
+    res.clearCookie("refreshToken");
+    return res.sendStatus(204); // No Content
+  }
+
+  const user = await User.findOne({
+    where: {
+      refresh_token: refreshToken,
+    },
+  });
+
+  // Token tidak cocok dengan database
+  if (!user) {
+    res.clearCookie("refreshToken"); // tetap hapus cookie
+    return res.sendStatus(204);
+  }
+
+  // Token cocok → hanya hapus dari DB untuk device ini
+  await User.update(
+    { refresh_token: null },
+    {
+      where: {
+        id: user.id,
+      },
+    }
+  );
+
+  res.clearCookie("refreshToken"); // hapus cookie dari browser
+  return res.sendStatus(200);
+}
 
 module.exports = {
-  login
+  login,
+  logout
 };

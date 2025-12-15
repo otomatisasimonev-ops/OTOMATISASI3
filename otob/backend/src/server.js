@@ -14,11 +14,14 @@ const newsRoutes = require('./routes/newsRoutes');
 const ujiAksesReportRoutes = require('./routes/ujiAksesReportRoutes');
 const adminUjiAksesReportRoutes = require('./routes/adminUjiAksesReportRoutes');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+app.use(cookieParser());
 
 app.use(cors());
 app.use(

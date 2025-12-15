@@ -1,45 +1,46 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
   const User = sequelize.define(
-    'User',
+    "User",
     {
       id: {
         type: DataTypes.INTEGER,
         autoIncrement: true,
-        primaryKey: true
+        primaryKey: true,
       },
       username: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true
+        unique: true,
       },
       password: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
       },
       role: {
-        type: DataTypes.ENUM('admin', 'user'),
+        type: DataTypes.ENUM("admin", "user"),
         allowNull: false,
-        defaultValue: 'user'
+        defaultValue: "user",
       },
       daily_quota: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        defaultValue: 20
+        defaultValue: 20,
       },
       used_today: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        defaultValue: 0
+        defaultValue: 0,
       },
       last_reset_date: {
         type: DataTypes.DATEONLY,
-        allowNull: true
-      }
+        allowNull: true,
+      },
+      refresh_token: { type: DataTypes.TEXT, allowNull: true },
     },
     {
-      tableName: 'Users'
+      tableName: "Users",
     }
   );
 
