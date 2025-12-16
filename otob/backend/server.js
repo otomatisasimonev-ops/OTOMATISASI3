@@ -36,6 +36,12 @@ app.use(
 );
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/", (req, res) => {
+  res.json({
+    message: "Otomatisasi API is running",
+    time: new Date().toString(),
+  });
+});
 
 app.use("/auth", authRoutes);
 app.use("/config", configRoutes);

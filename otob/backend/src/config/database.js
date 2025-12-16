@@ -11,7 +11,9 @@ console.log("DB_HOST:", DB_HOST);
 
 const db = new Sequelize(DB_NAME,DB_USERNAME,DB_PASSWORD,{
     host: DB_HOST,
-    dialect:'mysql'
+    dialect:'mysql',
+    //logging: (msg) => console.log("[SQL]", msg)
+    logging: false
 })
 
 
