@@ -199,7 +199,7 @@ const validateSubmittedAnswers = (answers = {}) => {
   return missing;
 };
 
-module.exports = {
+export{
   QUESTIONS,
   computeAnswersAndTotal,
   validateSubmittedAnswers,

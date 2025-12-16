@@ -1,5 +1,5 @@
-const { BadanPublik, Assignment } = require('../models');
-const { Op } = require('sequelize');
+import { Op } from 'sequelize';
+import { BadanPublik, Assignment } from '../models';
 
 const isValidEmail = (val) => {
   if (!val) return false;
@@ -227,7 +227,7 @@ const importBadanPublik = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   listBadanPublik,
   getBadanPublik,
   createBadanPublik,

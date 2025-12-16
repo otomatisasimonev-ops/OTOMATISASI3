@@ -1,5 +1,5 @@
-const { Op } = require('sequelize');
-const { Holiday } = require('../models');
+import { Op } from 'sequelize';
+import { Holiday } from '../models';
 
 const listHolidays = async (req, res) => {
   try {
@@ -44,7 +44,7 @@ const deleteHoliday = async (req, res) => {
   }
 };
 
-module.exports = {
+export{
   listHolidays,
   createHoliday,
   deleteHoliday

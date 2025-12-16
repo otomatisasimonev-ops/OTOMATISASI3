@@ -1,5 +1,5 @@
-const { Op } = require('sequelize');
-const { Assignment, User, BadanPublik, AssignmentHistory } = require('../models');
+import { Op } from 'sequelize';
+import { Assignment, User, BadanPublik, AssignmentHistory } from '../models';
 
 // User (or admin) fetch own assignments
 const listMyAssignments = async (req, res) => {
@@ -187,7 +187,7 @@ const listAssignmentHistory = async (_req, res) => {
   }
 };
 
-module.exports = {
+export {
   assignToUser,
   listAssignments,
   listAssignmentsByUser,

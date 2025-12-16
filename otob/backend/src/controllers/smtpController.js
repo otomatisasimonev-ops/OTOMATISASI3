@@ -1,6 +1,6 @@
-const nodemailer = require('nodemailer');
-const { ImapFlow } = require('imapflow');
-const { SmtpConfig } = require('../models');
+import nodemailer from 'nodemailer';
+import { ImapFlow } from 'imapflow';
+import { SmtpConfig } from '../models';
 
 // Simpan atau perbarui SMTP per user
 const saveSmtpConfig = async (req, res) => {
@@ -117,7 +117,7 @@ const verifyImapConfig = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   saveSmtpConfig,
   checkSmtpConfig,
   verifySmtpConfig,

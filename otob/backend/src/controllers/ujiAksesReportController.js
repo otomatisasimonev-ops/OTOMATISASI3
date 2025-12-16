@@ -1,13 +1,8 @@
-const fs = require('fs');
-const path = require('path');
-const { Op } = require('sequelize');
-const { UjiAksesReport, BadanPublik, User, Assignment } = require('../models');
-const {
-  computeAnswersAndTotal,
-  validateSubmittedAnswers,
-  QUESTIONS,
-  normalizeMaybeJson
-} = require('../utils/ujiAksesRubric');
+import fs from 'fs';
+import path from 'path';
+import { Op } from 'sequelize';
+import { UjiAksesReport, BadanPublik, User, Assignment } from '../models';
+import { computeAnswersAndTotal, validateSubmittedAnswers, QUESTIONS, normalizeMaybeJson} from '../utils/ujiAksesRubric';
 
 const ensureUploadsDir = (dir) => {
   try {
@@ -256,7 +251,7 @@ const ensureReportUploadDir = (reportId, questionKey) => {
   return dir;
 };
 
-module.exports = {
+export {
   createReport,
   updateDraftReport,
   listMyReports,

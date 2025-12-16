@@ -1,5 +1,5 @@
-const { User, QuotaRequest } = require('../models');
-const { Op } = require('sequelize');
+import { User, QuotaRequest } from '../models';
+import { Op } from 'sequelize';
 
 const resetIfNeeded = async (user) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -136,7 +136,7 @@ const updateQuotaRequest = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getMeQuota,
   setUserQuota,
   createQuotaRequest,

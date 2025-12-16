@@ -1,6 +1,6 @@
-const bcrypt = require('bcrypt');
-const { User } = require('../models');
-const jwt = require('jsonwebtoken');
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { User } from "../models";
 
 //Nambah fungsi buat login handler
 const login = async (req, res) => {
@@ -113,7 +113,7 @@ const logout = async (req, res) => {
   return res.sendStatus(200);
 }
 
-module.exports = {
+export {
   login,
   logout
 };

@@ -1,6 +1,6 @@
-const nodemailer = require('nodemailer');
-const { BadanPublik, EmailLog, SmtpConfig, User, Assignment } = require('../models');
-const emailEventBus = require('../utils/eventBus');
+import nodemailer from 'nodemailer';
+import { BadanPublik, EmailLog, SmtpConfig, User, Assignment } from '../models';
+import emailEventBus from '../utils/eventBus';
 
 const ATTACHMENT_LIMIT_BYTES = 2 * 1024 * 1024;
 
@@ -419,7 +419,7 @@ const retryEmail = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   sendBulkEmail,
   getEmailLogs,
   streamEmailLogs,

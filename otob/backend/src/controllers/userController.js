@@ -1,6 +1,6 @@
-const bcrypt = require('bcrypt');
-const { Op } = require('sequelize');
-const { User, Assignment, AssignmentHistory, SmtpConfig, EmailLog, QuotaRequest } = require('../models');
+import bcrypt from 'bcrypt';
+import { Op } from 'sequelize';
+import { User, Assignment, AssignmentHistory, SmtpConfig, EmailLog, QuotaRequest } from '../models';
 
 // REGISTER //baru nambahin pasword dan bcrypt
 const createUser = async (req, res) => {
