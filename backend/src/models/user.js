@@ -14,6 +14,24 @@ const User = db.define(
       allowNull: false,
       unique: true,
     },
+    group: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+    nomer_hp: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+    email: {
+      type: Sequelize.STRING,
+      allowNull: true,
+      validate: {
+        isEmail: {
+          args: true,
+          msg: "Email tidak valid",
+        },
+      },
+    },
     password: {
       type: Sequelize.STRING,
       allowNull: false,

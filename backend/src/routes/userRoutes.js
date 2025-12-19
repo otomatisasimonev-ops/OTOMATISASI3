@@ -1,14 +1,16 @@
 import express from 'express';
-import { createUser, listUsers, getMe, deleteUser, resetUserPassword, updateRole } from '../controllers/userController.js';
+import { createUser, listUsers, getMe, deleteUser, resetUserPassword, updateRole, importUsers, updateMyPassword } from '../controllers/userController.js';
 import {verifyToken} from '../middleware/verifyToken.js';
 import {checkRole} from '../middleware/checkRole.js';
 
 const router = express.Router();
 
 router.get('/me', verifyToken, getMe);
+router.patch('/me/password', verifyToken, updateMyPassword);
 
 router.use(verifyToken, checkRole('admin'));
 router.get('/', listUsers);
+router.post('/import', importUsers);
 router.post('/', createUser);
 router.patch('/:id/password', resetUserPassword);
 router.patch('/:id/role', updateRole);

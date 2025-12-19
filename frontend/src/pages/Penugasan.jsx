@@ -31,6 +31,7 @@ const Penugasan = () => {
   const [summaryPage, setSummaryPage] = useState(1);
   const [summaryPageSize, setSummaryPageSize] = useState(20);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [groupFilter, setGroupFilter] = useState('all');
 
   const refreshData = useCallback(
     async (keepSelection = true, currentSelectedId = '') => {
@@ -186,6 +187,14 @@ const Penugasan = () => {
       })),
     [assignmentsMap, badan]
   );
+
+  const userGroups = useMemo(() => {
+    const groups = users
+      .filter((u) => u.role === 'user')
+      .map((u) => String(u.group || '').trim())
+      .filter(Boolean);
+    return Array.from(new Set(groups)).sort();
+  }, [users]);
   const summaryTotalPages = Math.max(1, Math.ceil(badanSummary.length / summaryPageSize));
   const summaryCurrentPage = Math.min(summaryPage, summaryTotalPages);
   const pagedBadanSummary = useMemo(() => {
@@ -313,6 +322,11 @@ const Penugasan = () => {
   };
 
   const filteredPendingRequests = pendingRequests;
+  const filteredUsers = useMemo(() => {
+    const base = users.filter((u) => u.role === 'user');
+    if (groupFilter === 'all') return base;
+    return base.filter((u) => String(u.group || '').trim() === groupFilter);
+  }, [users, groupFilter]);
 
   return (
     <div className="space-y-4">
@@ -357,10 +371,23 @@ const Penugasan = () => {
                 Langkah 1
               </span>
             </div>
+            <div className="mb-3">
+              <label className="text-xs text-slate-600">Filter group</label>
+              <select
+                value={groupFilter}
+                onChange={(e) => setGroupFilter(e.target.value)}
+                className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="all">Semua group</option>
+                {userGroups.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="space-y-2 max-h-96 overflow-auto">
-              {users
-                .filter((u) => u.role === 'user')
-                .map((u) => (
+              {filteredUsers.map((u) => (
                   <div
                     key={u.id}
                     onClick={() => handleSelectUser(u.id)}
@@ -389,8 +416,8 @@ const Penugasan = () => {
                     </div>
                   </div>
                 ))}
-              {users.filter((u) => u.role === 'user').length === 0 && (
-                <div className="text-xs text-slate-500">Belum ada user role user</div>
+              {filteredUsers.length === 0 && (
+                <div className="text-xs text-slate-500">Tidak ada user untuk filter ini</div>
               )}
             </div>
           </div>

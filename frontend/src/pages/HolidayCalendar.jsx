@@ -36,6 +36,9 @@ const HolidayCalendar = () => {
   const isAdmin = user?.role === 'admin';
   const [holidays, setHolidays] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
+  const [pendingAdds, setPendingAdds] = useState(() => new Set());
+  const [pendingRemoves, setPendingRemoves] = useState(() => new Set());
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -58,56 +61,123 @@ const HolidayCalendar = () => {
     [holidays]
   );
 
-  const upcoming = useMemo(() => {
-    const today = toISODate(new Date());
-    return sorted.filter((h) => h.date >= today);
-  }, [sorted]);
-
   const days = useMemo(() => buildCalendarDays(currentMonth), [currentMonth]);
   const monthLabel = currentMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
   const todayIso = toISODate(new Date());
-  const monthHolidays = useMemo(
-    () =>
-      sorted.filter((h) => {
-        const d = new Date(h.date);
-        return d.getMonth() === currentMonth.getMonth() && d.getFullYear() === currentMonth.getFullYear();
-      }),
-    [sorted, currentMonth]
-  );
-  const nextUpcoming = upcoming[0];
-
-  const isHoliday = (iso) => holidays.some((h) => h.date === iso);
+  const holidayByDate = useMemo(() => {
+    const map = {};
+    holidays.forEach((h) => {
+      map[h.date] = h;
+    });
+    return map;
+  }, [holidays]);
+  const isHoliday = (iso) => Boolean(holidayByDate[iso]);
+  const isPendingAdd = (iso) => pendingAdds.has(iso);
+  const isPendingRemove = (iso) => pendingRemoves.has(iso);
+  const isEffectiveHoliday = (iso) =>
+    (isHoliday(iso) && !isPendingRemove(iso)) || isPendingAdd(iso);
+  const monthHolidays = useMemo(() => {
+    const inMonth = (iso) => {
+      const d = new Date(iso);
+      return d.getMonth() === currentMonth.getMonth() && d.getFullYear() === currentMonth.getFullYear();
+    };
+    const baseCount = sorted.filter((h) => inMonth(h.date) && !isPendingRemove(h.date)).length;
+    const addedCount = Array.from(pendingAdds).filter((iso) => inMonth(iso)).length;
+    return baseCount + addedCount;
+  }, [sorted, currentMonth, pendingAdds, pendingRemoves]);
+  const totalHolidayCount = sorted.length - pendingRemoves.size + pendingAdds.size;
   const getHolidayName = (iso) => holidays.find((h) => h.date === iso)?.name || 'Libur';
 
-  const toggleHoliday = async (iso) => {
+  const toggleHoliday = (iso) => {
     if (!isAdmin) return;
     if (iso < todayIso) return; // tidak boleh masa lalu
-    if (isHoliday(iso)) {
-      const target = holidays.find((h) => h.date === iso);
-      if (!target) return;
-      try {
-        await deleteHoliday(target.id);
-        setHolidays((prev) => prev.filter((h) => h.id !== target.id));
-      } catch (err) {
-        console.error(err);
+    if (isEffectiveHoliday(iso)) {
+      if (isPendingAdd(iso)) {
+        setPendingAdds((prev) => {
+          const next = new Set(prev);
+          next.delete(iso);
+          return next;
+        });
+      } else {
+        setPendingRemoves((prev) => {
+          const next = new Set(prev);
+          if (next.has(iso)) {
+            next.delete(iso);
+          } else {
+            next.add(iso);
+          }
+          return next;
+        });
       }
-    } else {
-      try {
-        const created = await createHoliday({ date: iso, name: 'Libur Nasional' });
-        setHolidays((prev) => [...prev, created]);
-      } catch (err) {
-        console.error(err);
-      }
+      return;
     }
+    if (isPendingRemove(iso)) {
+      setPendingRemoves((prev) => {
+        const next = new Set(prev);
+        next.delete(iso);
+        return next;
+      });
+      return;
+    }
+    setPendingAdds((prev) => {
+      const next = new Set(prev);
+      if (next.has(iso)) {
+        next.delete(iso);
+      } else {
+        next.add(iso);
+      }
+      return next;
+    });
   };
 
-  const removeHoliday = async (id) => {
+  const queueRemoveHoliday = (iso) => {
     if (!isAdmin) return;
+    if (isPendingAdd(iso)) {
+      setPendingAdds((prev) => {
+        const next = new Set(prev);
+        next.delete(iso);
+        return next;
+      });
+      return;
+    }
+    setPendingRemoves((prev) => {
+      const next = new Set(prev);
+      if (next.has(iso)) {
+        next.delete(iso);
+      } else {
+        next.add(iso);
+      }
+      return next;
+    });
+  };
+
+  const saveChanges = async () => {
+    if (!isAdmin) return;
+    if (pendingAdds.size === 0 && pendingRemoves.size === 0) return;
+    setSaving(true);
     try {
-      await deleteHoliday(id);
-      setHolidays((prev) => prev.filter((h) => h.id !== id));
+      const created = [];
+      for (const iso of pendingAdds) {
+        const res = await createHoliday({ date: iso, name: 'Libur Nasional' });
+        if (res) created.push(res);
+      }
+      const removeIds = [];
+      for (const iso of pendingRemoves) {
+        const target = holidayByDate[iso];
+        if (!target) continue;
+        await deleteHoliday(target.id);
+        removeIds.push(target.id);
+      }
+      setHolidays((prev) => {
+        const filtered = prev.filter((h) => !removeIds.includes(h.id));
+        return [...filtered, ...created];
+      });
+      setPendingAdds(new Set());
+      setPendingRemoves(new Set());
     } catch (err) {
       console.error(err);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -127,40 +197,34 @@ const HolidayCalendar = () => {
         <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white shadow-soft">
           <span className="h-2 w-2 rounded-full bg-primary" />
           <span className="text-slate-700">Libur bulan ini: </span>
-          <span className="font-semibold text-slate-900">{monthHolidays.length}</span>
-        </div>
-        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white shadow-soft">
-          <span className="h-2 w-2 rounded-full bg-amber-500" />
-          <span className="text-slate-700">Libur terdekat: </span>
-          <span className="font-semibold text-slate-900">
-            {nextUpcoming ? `${nextUpcoming.name} (${nextUpcoming.date})` : '—'}
-          </span>
+          <span className="font-semibold text-slate-900">{monthHolidays}</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="space-y-2">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Pilih tanggal libur</h2>
               <p className="text-sm text-slate-500">Klik tanggal untuk menambah/menghapus libur.</p>
             </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentMonth((prev) => addMonths(prev, -1))}
-              className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-            >
-              ‹
-            </button>
-            <div className="text-sm font-semibold text-slate-800 w-32 text-center">{monthLabel}</div>
-            <button
-              onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
-              className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-            >
-              ›
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentMonth((prev) => addMonths(prev, -1))}
+                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+              >
+                &lt;
+              </button>
+              <div className="text-sm font-semibold text-slate-800 w-32 text-center">{monthLabel}</div>
+              <button
+                onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
+                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+              >
+                &gt;
+              </button>
+            </div>
           </div>
-        </div>
           <div className="grid grid-cols-7 text-[11px] text-slate-500 gap-1 transition-all duration-200 ease-out" key={monthLabel}>
             {['M', 'S', 'S', 'R', 'K', 'J', 'S'].map((d) => (
               <div key={d} className="text-center py-1 font-semibold">
@@ -180,13 +244,17 @@ const HolidayCalendar = () => {
                       ? 'bg-rose-50 text-rose-500 border-rose-200 cursor-not-allowed'
                       : day.iso < todayIso
                       ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
-                      : isHoliday(day.iso)
-                      ? 'bg-primary text-white border-primary hover:-translate-y-0.5 hover:shadow'
+                      : isEffectiveHoliday(day.iso)
+                      ? isPendingRemove(day.iso)
+                        ? 'bg-rose-50 text-rose-600 border-rose-200 hover:-translate-y-0.5 hover:shadow'
+                        : 'bg-primary text-white border-primary hover:-translate-y-0.5 hover:shadow'
+                      : isPendingAdd(day.iso)
+                      ? 'bg-emerald-600 text-white border-emerald-600 hover:-translate-y-0.5 hover:shadow'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow'
                   } ${!isAdmin ? 'cursor-default' : ''}`}
                 >
                   <span>{day.label}</span>
-                  {isHoliday(day.iso) && (
+                  {isEffectiveHoliday(day.iso) && !isPendingRemove(day.iso) && (
                     <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-white/90" />
                   )}
                 </button>
@@ -196,6 +264,18 @@ const HolidayCalendar = () => {
             )}
           </div>
         </div>
+        {(pendingAdds.size > 0 || pendingRemoves.size > 0) && (
+          <div className="flex justify-end">
+            <button
+              onClick={saveChanges}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {saving ? 'Menyimpan...' : 'Simpan perubahan'}
+            </button>
+          </div>
+        )}
+        </div>
         <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -203,7 +283,7 @@ const HolidayCalendar = () => {
               <p className="text-sm text-slate-500">Libur akan dikecualikan dari hitung hari kerja.</p>
             </div>
             <span className="text-xs px-2 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600">
-              {sorted.length} hari
+              {totalHolidayCount} hari
             </span>
           </div>
           <div className="max-h-[420px] overflow-auto border border-slate-100 rounded-xl">
@@ -224,16 +304,19 @@ const HolidayCalendar = () => {
                   </tr>
                 ) : (
                   sorted.map((h) => (
-                    <tr key={h.id} className="border-t border-slate-100">
+                    <tr
+                      key={h.id}
+                      className={`border-t border-slate-100 ${isPendingRemove(h.date) ? 'bg-rose-50' : ''}`}
+                    >
                       <td className="px-4 py-2 text-slate-800 font-semibold">{h.date}</td>
                       <td className="px-4 py-2 text-slate-700">{h.name}</td>
                       {isAdmin && (
                         <td className="px-4 py-2">
                           <button
-                            onClick={() => removeHoliday(h.id)}
+                            onClick={() => queueRemoveHoliday(h.date)}
                             className="text-rose-500 text-sm font-semibold hover:underline"
                           >
-                            Hapus
+                            {isPendingRemove(h.date) ? 'Batal hapus' : 'Hapus'}
                           </button>
                         </td>
                       )}
@@ -245,36 +328,12 @@ const HolidayCalendar = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Libur mendatang</h2>
-              <p className="text-sm text-slate-500">Urut berdasarkan tanggal terdekat.</p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {upcoming.length === 0 ? (
-              <div className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3">
-                Tidak ada libur terjadwal ke depan.
-              </div>
-            ) : (
-              upcoming.map((h) => (
-                <div
-                  key={h.id}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{h.name}</div>
-                    <div className="text-xs text-slate-600">{h.date}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
 };
 
 export default HolidayCalendar;
+
+
+

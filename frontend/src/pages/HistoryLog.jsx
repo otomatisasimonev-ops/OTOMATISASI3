@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { fetchHolidays } from '../services/holidays';
+import { computeDueInfo } from '../utils/workdays';
 
 const HistoryLog = () => {
   const { user } = useAuth();
@@ -13,6 +15,7 @@ const HistoryLog = () => {
   const [streamStatus, setStreamStatus] = useState('idle');
   const [search, setSearch] = useState('');
   const [retryingId, setRetryingId] = useState(null);
+  const [holidays, setHolidays] = useState([]);
 
   const baseUrl = useMemo(() => {
     const url = api.defaults?.baseURL || import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -62,6 +65,18 @@ const HistoryLog = () => {
   }, [fetchLogs]);
 
   useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const res = await fetchHolidays();
+        setHolidays(res || []);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadHolidays();
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
     setOwnerFilter(user.role === 'admin' ? 'all' : 'mine');
   }, [user]);
@@ -99,7 +114,6 @@ const HistoryLog = () => {
     if (!q) return byOwner;
     return byOwner.filter(
       (l) =>
-        l.subject?.toLowerCase().includes(q) ||
         l.badanPublik?.nama_badan_publik?.toLowerCase().includes(q) ||
         l.user?.username?.toLowerCase().includes(q) ||
         l.message_id?.toLowerCase().includes(q)
@@ -117,12 +131,11 @@ const HistoryLog = () => {
     const rows = filteredLogs.map((item) => [
       item.user?.username || '-',
       item.badanPublik?.nama_badan_publik || '-',
-      item.subject || '-',
       item.status,
       formatDate(item.sent_at),
       item.message_id || ''
     ]);
-    const header = ['Pengirim', 'Target', 'Subjek', 'Status', 'Waktu', 'MessageID'];
+    const header = ['Pengirim', 'Target', 'Status', 'Waktu', 'MessageID'];
     const toCsv = [header, ...rows]
       .map((cols) =>
         cols
@@ -146,7 +159,6 @@ const HistoryLog = () => {
     const rows = filteredLogs.map((item) => ({
       Pengirim: item.user?.username || '-',
       Target: item.badanPublik?.nama_badan_publik || '-',
-      Subjek: item.subject || '-',
       Status: item.status,
       Waktu: formatDate(item.sent_at),
       MessageID: item.message_id || ''
@@ -167,7 +179,6 @@ const HistoryLog = () => {
     filteredLogs.forEach((item, idx) => {
       const lines = [
         `${idx + 1}. ${item.user?.username || '-'} -> ${item.badanPublik?.nama_badan_publik || '-'}`,
-        `Subjek: ${item.subject || '-'}`,
         `Status: ${item.status} • ${formatDate(item.sent_at)}`,
         `MessageID: ${item.message_id || '-'}`
       ];
@@ -191,6 +202,29 @@ const HistoryLog = () => {
     status === 'success'
       ? 'bg-emerald-100 text-emerald-700'
       : 'bg-rose-100 text-rose-700';
+
+  const getDueBadge = (log) => {
+    const info = computeDueInfo({ startDate: log.sent_at, baseDays: 10, holidays });
+    if (info.daysLeft == null) {
+      return { label: '-', className: 'bg-slate-100 text-slate-600 border-slate-200' };
+    }
+    if (info.daysLeft < 0) {
+      return {
+        label: `Lewat ${Math.abs(info.daysLeft)} hari`,
+        className: 'bg-black text-white border-black'
+      };
+    }
+    if (info.daysLeft <= 2) {
+      return { label: `${info.daysLeft} hari`, className: 'bg-rose-100 text-rose-700 border-rose-200' };
+    }
+    if (info.daysLeft <= 3) {
+      return { label: `${info.daysLeft} hari`, className: 'bg-orange-100 text-orange-700 border-orange-200' };
+    }
+    if (info.daysLeft <= 6) {
+      return { label: `${info.daysLeft} hari`, className: 'bg-amber-100 text-amber-700 border-amber-200' };
+    }
+    return { label: `${info.daysLeft} hari`, className: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+  };
 
   const handleRetry = async (log) => {
     setRetryingId(log.id);
@@ -265,7 +299,7 @@ const HistoryLog = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari subject/target/message id"
+            placeholder="Cari target/message id"
             className="px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
@@ -350,8 +384,8 @@ const HistoryLog = () => {
               <tr>
                 <th className="px-4 py-3 text-left">Pengirim</th>
                 <th className="px-4 py-3 text-left">Target</th>
-                <th className="px-4 py-3 text-left">Subjek</th>
                 <th className="px-4 py-3 text-left">Template/ID</th>
+                <th className="px-4 py-3 text-left">Tenggat</th>
                 <th className="px-4 py-3 text-left">Waktu</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">Aksi</th>
@@ -360,13 +394,13 @@ const HistoryLog = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={7}>
                     Memuat log...
                   </td>
                 </tr>
               ) : filteredLogs.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={7}>
                     Belum ada riwayat. Pastikan SMTP sudah siap atau cek filter.
                   </td>
                 </tr>
@@ -378,7 +412,6 @@ const HistoryLog = () => {
                   >
                     <td className="px-4 py-3 font-semibold text-slate-900">{item.user?.username}</td>
                     <td className="px-4 py-3 text-slate-700">{item.badanPublik?.nama_badan_publik}</td>
-                    <td className="px-4 py-3 text-slate-700">{item.subject}</td>
                     <td className="px-4 py-3 text-slate-700">
                       <div className="flex flex-col gap-1 text-xs">
                         <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 w-max">
@@ -386,6 +419,16 @@ const HistoryLog = () => {
                         </span>
                         <span className="text-[11px] text-slate-500">Req #{item.id}</span>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const badge = getDueBadge(item);
+                        return (
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-slate-700">{formatDate(item.sent_at)}</td>
                     <td className="px-4 py-3">
