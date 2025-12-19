@@ -3,8 +3,9 @@ export function setRefreshCookie(res, refreshToken) {
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
     secure: isProd,           // PROD wajib true (https)
-    sameSite: "lax",          // nanti kita sesuaikan jika FE/BE beda domain
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari (bisa diubah)
+    sameSite: isProd ? "strict" : "lax", // strict di production untuk keamanan maksimal
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari
+    path: "/auth",   // PENTING: batasi scope cookie hanya untuk turunan /auth endpoint
   });
 }
 
@@ -14,5 +15,7 @@ export function clearRefreshCookie(res) {
   res.clearCookie("refreshToken", {
     httpOnly: true,
     secure: isProd,
+    sameSite: isProd ? "strict" : "lax",
+    path: "/auth", // Harus sama dengan path saat set cookie
   });
 }
