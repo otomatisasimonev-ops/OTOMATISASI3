@@ -29,8 +29,12 @@ const emitLog = async (logId) => {
     const log = await EmailLog.findByPk(logId, {
       attributes: { exclude: ['attachments_data'] },
       include: [
-        { model: User, as: 'user', attributes: ['username'] },
-        { model: BadanPublik, as: 'badanPublik', attributes: ['nama_badan_publik'] }
+        { model: User, as: 'user', attributes: ['id', 'username', 'email', 'nomer_hp'] },
+        {
+          model: BadanPublik,
+          as: 'badanPublik',
+          attributes: ['id', 'nama_badan_publik', 'kategori', 'status']
+        }
       ]
     });
     if (log) {
@@ -239,7 +243,7 @@ const sendBulkEmail = async (req, res) => {
 
         await target.update({
           sent_count: target.sent_count + 1,
-          status: 'sent'
+          status: target.status === 'selesai' ? 'selesai' : 'belum dibalas'
         });
 
         const newLog = await EmailLog.create({
@@ -306,8 +310,12 @@ const getEmailLogs = async (req, res) => {
       where,
       attributes: { exclude: ['attachments_data'] },
       include: [
-        { model: User, as: 'user', attributes: ['username'] },
-        { model: BadanPublik, as: 'badanPublik', attributes: ['nama_badan_publik'] }
+        { model: User, as: 'user', attributes: ['id', 'username', 'email', 'nomer_hp'] },
+        {
+          model: BadanPublik,
+          as: 'badanPublik',
+          attributes: ['id', 'nama_badan_publik', 'kategori', 'status']
+        }
       ],
       order: [['sent_at', 'DESC']]
     });

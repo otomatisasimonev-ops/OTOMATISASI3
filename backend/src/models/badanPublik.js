@@ -37,7 +37,7 @@ const BadanPublik = db.define("BadanPublik", {
   status: {
     type: Sequelize.STRING,
     allowNull: false,
-    defaultValue: "pending",
+    defaultValue: "belum dibalas",
   },
   thread_id: {
     type: Sequelize.STRING,

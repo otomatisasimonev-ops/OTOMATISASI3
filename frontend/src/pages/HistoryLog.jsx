@@ -6,11 +6,14 @@ import { computeDueInfo } from '../utils/workdays';
 
 const HistoryLog = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState(null);
+  const [senderInfo, setSenderInfo] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [ownerFilter, setOwnerFilter] = useState(user?.role === 'admin' ? 'all' : 'mine');
+  const [ownerFilter, setOwnerFilter] = useState(isAdmin ? 'all' : 'mine');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [infoMessage, setInfoMessage] = useState('');
   const [streamStatus, setStreamStatus] = useState('idle');
   const [search, setSearch] = useState('');
@@ -78,8 +81,8 @@ const HistoryLog = () => {
 
   useEffect(() => {
     if (!user) return;
-    setOwnerFilter(user.role === 'admin' ? 'all' : 'mine');
-  }, [user]);
+    setOwnerFilter(isAdmin ? 'all' : 'mine');
+  }, [isAdmin, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -106,19 +109,29 @@ const HistoryLog = () => {
     };
   }, [baseUrl, mergeLog, user]);
 
+  const categories = useMemo(() => {
+    const values = logs.map((l) => l.badanPublik?.kategori).filter(Boolean);
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, 'id-ID'));
+  }, [logs]);
+
   const filteredLogs = useMemo(() => {
     const byStatus = statusFilter === 'all' ? logs : logs.filter((l) => l.status === statusFilter);
     const byOwner =
       ownerFilter === 'all' ? byStatus : byStatus.filter((l) => l.user_id === user?.id);
+    const byCategory =
+      categoryFilter === 'all'
+        ? byOwner
+        : byOwner.filter((l) => l.badanPublik?.kategori === categoryFilter);
     const q = search.toLowerCase();
-    if (!q) return byOwner;
-    return byOwner.filter(
+    if (!q) return byCategory;
+    return byCategory.filter(
       (l) =>
         l.badanPublik?.nama_badan_publik?.toLowerCase().includes(q) ||
+        l.badanPublik?.kategori?.toLowerCase().includes(q) ||
         l.user?.username?.toLowerCase().includes(q) ||
         l.message_id?.toLowerCase().includes(q)
     );
-  }, [logs, ownerFilter, statusFilter, user?.id, search]);
+  }, [logs, ownerFilter, statusFilter, categoryFilter, user?.id, search]);
 
   const openGmail = (messageId) => {
     const url = messageId
@@ -179,7 +192,7 @@ const HistoryLog = () => {
     filteredLogs.forEach((item, idx) => {
       const lines = [
         `${idx + 1}. ${item.user?.username || '-'} -> ${item.badanPublik?.nama_badan_publik || '-'}`,
-        `Status: ${item.status} • ${formatDate(item.sent_at)}`,
+        `Status: ${item.status} - ${formatDate(item.sent_at)}`,
         `MessageID: ${item.message_id || '-'}`
       ];
       lines.forEach((line) => {
@@ -202,6 +215,39 @@ const HistoryLog = () => {
     status === 'success'
       ? 'bg-emerald-100 text-emerald-700'
       : 'bg-rose-100 text-rose-700';
+
+  const normalizeBpStatus = (status) => {
+    if (!status || status === 'pending' || status === 'sent') return 'belum dibalas';
+    return status;
+  };
+
+  const bpStatusOptions = [
+    { value: 'belum dibalas', label: 'Belum dibalas' },
+    { value: 'dibalas', label: 'Dibalas' },
+    { value: 'selesai', label: 'Selesai', disabled: !isAdmin }
+  ];
+
+  const bpStatusClass = (status) => {
+    if (status === 'dibalas') return 'bg-amber-100 text-amber-700 border-amber-200';
+    if (status === 'selesai') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    return 'bg-slate-100 text-slate-700 border-slate-200';
+  };
+
+  const handleStatusChange = async (log, nextStatus) => {
+    if (!log?.badanPublik?.id) return;
+    try {
+      await api.put(`/badan-publik/${log.badanPublik.id}`, { status: nextStatus });
+      setLogs((prev) =>
+        prev.map((item) =>
+          item.badanPublik?.id === log.badanPublik.id
+            ? { ...item, badanPublik: { ...item.badanPublik, status: nextStatus } }
+            : item
+        )
+      );
+    } catch (err) {
+      setInfoMessage(err.response?.data?.message || 'Gagal memperbarui status');
+    }
+  };
 
   const getDueBadge = (log) => {
     const info = computeDueInfo({ startDate: log.sent_at, baseDays: 10, holidays });
@@ -299,7 +345,7 @@ const HistoryLog = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari target/message id"
+            placeholder="Cari target/kategori/message id"
             className="px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
@@ -309,7 +355,7 @@ const HistoryLog = () => {
         <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-600">Status:</span>
+              <span className="text-sm text-slate-600">Status Email:</span>
               <div className="flex rounded-xl border border-slate-200 overflow-hidden">
                 {['all', 'success', 'failed'].map((opt) => (
                   <button
@@ -345,6 +391,21 @@ const HistoryLog = () => {
                 </div>
               </div>
             )}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-600">Kategori:</span>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-200 text-sm"
+              >
+                <option value="all">Semua kategori</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
             {infoMessage && (
               <span className="text-sm text-primary font-semibold">{infoMessage}</span>
             )}
@@ -364,7 +425,7 @@ const HistoryLog = () => {
                       {item.badanPublik?.nama_badan_publik || '-'}
                     </div>
                     <div className="text-xs text-slate-500 line-clamp-2">
-                      {item.status === 'failed' ? item.error_message || 'Gagal' : 'Berhasil'} · {formatDate(item.sent_at)}
+                      {item.status === 'failed' ? item.error_message || 'Gagal' : 'Berhasil'} - {formatDate(item.sent_at)}
                     </div>
                   </div>
                 </div>
@@ -384,10 +445,10 @@ const HistoryLog = () => {
               <tr>
                 <th className="px-4 py-3 text-left">Pengirim</th>
                 <th className="px-4 py-3 text-left">Target</th>
-                <th className="px-4 py-3 text-left">Template/ID</th>
                 <th className="px-4 py-3 text-left">Tenggat</th>
                 <th className="px-4 py-3 text-left">Waktu</th>
-                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Status BP</th>
+                <th className="px-4 py-3 text-left">Status Email</th>
                 <th className="px-4 py-3 text-left">Aksi</th>
               </tr>
             </thead>
@@ -410,17 +471,17 @@ const HistoryLog = () => {
                     key={item.id}
                     className="border-t border-slate-100 hover:bg-slate-50"
                   >
-                    <td className="px-4 py-3 font-semibold text-slate-900">{item.user?.username}</td>
-                    <td className="px-4 py-3 text-slate-700">{item.badanPublik?.nama_badan_publik}</td>
-                    <td className="px-4 py-3 text-slate-700">
-                      <div className="flex flex-col gap-1 text-xs">
-                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 w-max">
-                          {item.template_id || item.meta?.template_id || 'Tidak diketahui'}
-                        </span>
-                        <span className="text-[11px] text-slate-500">Req #{item.id}</span>
-                      </div>
+                    <td className="px-4 py-2 font-semibold text-slate-900">
+                      <button
+                        type="button"
+                        onClick={() => setSenderInfo(item.user || null)}
+                        className="text-left hover:underline"
+                      >
+                        {item.user?.username || '-'}
+                      </button>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2 text-slate-700">{item.badanPublik?.nama_badan_publik}</td>
+                    <td className="px-4 py-2">
                       {(() => {
                         const badge = getDueBadge(item);
                         return (
@@ -430,13 +491,29 @@ const HistoryLog = () => {
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{formatDate(item.sent_at)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2 text-slate-700">{formatDate(item.sent_at)}</td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={normalizeBpStatus(item.badanPublik?.status)}
+                        onChange={(e) => handleStatusChange(item, e.target.value)}
+                        className={`px-3 py-2 rounded-xl border text-xs font-semibold ${bpStatusClass(
+                          normalizeBpStatus(item.badanPublik?.status)
+                        )}`}
+                        disabled={!isAdmin && normalizeBpStatus(item.badanPublik?.status) === 'selesai'}
+                      >
+                        {bpStatusOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusBadge(item.status)}`}>
                         {item.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => openGmail(item.message_id)}
@@ -479,9 +556,7 @@ const HistoryLog = () => {
               <button
                 onClick={() => setSelectedLog(null)}
                 className="text-slate-500 hover:text-slate-800 text-xl font-bold"
-              >
-                ×
-              </button>
+              >x</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -560,6 +635,47 @@ const HistoryLog = () => {
               <button
                 onClick={() => setSelectedLog(null)}
                 className="px-4 py-3 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {senderInfo && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Pengirim</h3>
+                <p className="text-sm text-slate-500">Detail informasi pengirim</p>
+              </div>
+              <button
+                onClick={() => setSenderInfo(null)}
+                className="text-slate-500 hover:text-slate-800 text-xl font-bold"
+              >
+                x
+              </button>
+            </div>
+            <div className="space-y-3 text-sm text-slate-700">
+              <div>
+                <div className="text-xs text-slate-500">Nama</div>
+                <div className="font-semibold text-slate-900">{senderInfo?.username || '-'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Email</div>
+                <div className="font-semibold text-slate-900">{senderInfo?.email || '-'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Nomor HP</div>
+                <div className="font-semibold text-slate-900">{senderInfo?.nomer_hp || '-'}</div>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setSenderInfo(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold shadow-soft hover:bg-slate-800"
               >
                 Tutup
               </button>

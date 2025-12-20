@@ -51,6 +51,14 @@ const getBadanPublik = async (req, res) => {
   }
 };
 
+const normalizeStatus = (val) => {
+  const raw = String(val || '').trim().toLowerCase();
+  if (!raw) return 'belum dibalas';
+  if (['pending', 'sent'].includes(raw)) return 'belum dibalas';
+  if (['belum dibalas', 'dibalas', 'selesai'].includes(raw)) return raw;
+  return 'belum dibalas';
+};
+
 const createBadanPublik = async (req, res) => {
   try {
     const payload = req.body || {};
@@ -73,7 +81,7 @@ const createBadanPublik = async (req, res) => {
       email,
       website: payload.website,
       pertanyaan: payload.pertanyaan,
-      status: payload.status || 'pending',
+      status: normalizeStatus(payload.status),
       sent_count: payload.sent_count || 0
     });
 
@@ -122,6 +130,12 @@ const updateBadanPublik = async (req, res) => {
       }
     }
 
+    const nextStatus =
+      payload.status !== undefined ? normalizeStatus(payload.status) : data.status;
+    if (!isAdmin && payload.status !== undefined && nextStatus === 'selesai') {
+      return res.status(400).json({ message: 'Status tidak valid untuk user' });
+    }
+
     // Build update payload berdasarkan role
     const updatePayload = isAdmin
       ? {
@@ -130,14 +144,15 @@ const updateBadanPublik = async (req, res) => {
           email: nextEmail,
           website: payload.website ?? data.website,
           pertanyaan: payload.pertanyaan ?? data.pertanyaan,
-          status: payload.status ?? data.status,
+          status: nextStatus,
           sent_count: payload.sent_count ?? data.sent_count
         }
       : {
           // user hanya boleh koreksi email/website/pertanyaan
           email: nextEmail,
           website: payload.website ?? data.website,
-          pertanyaan: payload.pertanyaan ?? data.pertanyaan
+          pertanyaan: payload.pertanyaan ?? data.pertanyaan,
+          ...(payload.status !== undefined ? { status: nextStatus } : {})
         };
 
     await data.update(updatePayload);
@@ -185,7 +200,7 @@ const importBadanPublik = async (req, res) => {
           email,
           website: (r.website || r.Website || '').trim() || null,
           pertanyaan: (r.pertanyaan || r.Pertanyaan || '').trim() || null,
-          status: (r.status || r.Status || 'pending').trim() || 'pending',
+          status: normalizeStatus(r.status || r.Status),
           thread_id: r.thread_id || r['Thread Id'] || r.ThreadId || null,
           sent_count: 0
         };

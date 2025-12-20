@@ -104,6 +104,13 @@ const createReport = async (req, res) => {
       submitted_at: status === 'submitted' ? new Date() : null
     });
 
+    if (status === 'submitted') {
+      await BadanPublik.update(
+        { status: 'selesai' },
+        { where: { id: badanPublikId } }
+      );
+    }
+
     return res.status(201).json(toPlainReport(report));
   } catch (err) {
     console.error(err);
@@ -182,6 +189,11 @@ const submitReport = async (req, res) => {
       total_skor: computed.totalSkor,
       submitted_at: new Date()
     });
+
+    await BadanPublik.update(
+      { status: 'selesai' },
+      { where: { id: report.badan_publik_id } }
+    );
 
     return res.json(toPlainReport(report));
   } catch (err) {
