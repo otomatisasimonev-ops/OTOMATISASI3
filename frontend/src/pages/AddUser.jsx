@@ -170,10 +170,8 @@ const AddUser = () => {
     setMessage('');
     setMessageType('info');
     try {
-      for (const id of selectedIds) {
-        await api.delete(`/users/${id}`);
-      }
-      setMessage(`Berhasil menghapus ${selectedIds.size} user.`);
+      const res = await api.post('/users/bulk-delete', { ids: Array.from(selectedIds) });
+      setMessage(res.data?.message || `Berhasil menghapus ${selectedIds.size} user.`);
       setMessageType('success');
       setSelectedIds(new Set());
       await loadUsers();

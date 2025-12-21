@@ -310,6 +310,54 @@ const deleteUser = async (req, res) => {
     }
   };
 
+const deleteUsersBulk = async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'IDs wajib diisi' });
+    }
+
+    const uniqueIds = Array.from(new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))));
+    if (uniqueIds.length === 0) {
+      return res.status(400).json({ message: 'IDs tidak valid' });
+    }
+
+    const users = await User.findAll({
+      where: { id: { [Op.in]: uniqueIds } },
+      attributes: ['id', 'role']
+    });
+
+    const deletableIds = users
+      .filter((u) => u.role !== 'admin' && u.id !== req.user.id)
+      .map((u) => u.id);
+
+    if (deletableIds.length === 0) {
+      return res.status(400).json({ message: 'Tidak ada user yang bisa dihapus' });
+    }
+
+    await Assignment.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
+    await AssignmentHistory.destroy({
+      where: {
+        [Op.or]: [{ user_id: { [Op.in]: deletableIds } }, { actor_id: { [Op.in]: deletableIds } }]
+      }
+    });
+    await SmtpConfig.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
+    await QuotaRequest.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
+    await EmailLog.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
+
+    const deleted = await User.destroy({ where: { id: { [Op.in]: deletableIds } } });
+
+    return res.json({
+      message: `Berhasil menghapus ${deleted} user.`,
+      deleted,
+      skipped: uniqueIds.length - deletableIds.length
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Gagal menghapus user terpilih' });
+  }
+};
+
 export {
   createUser,
   listUsers,
@@ -317,6 +365,7 @@ export {
   updateMyPassword,
   updateRole,
   deleteUser,
+  deleteUsersBulk,
   resetUserPassword,
   importUsers
 }

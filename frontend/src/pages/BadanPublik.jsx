@@ -24,6 +24,18 @@ const requiredFields = [
   { key: 'pertanyaan', label: 'Pertanyaan' }
 ];
 
+const assignmentImportFields = [
+  { key: 'nama_badan_publik', label: 'Nama Badan Publik', aliases: ['nama badan publik', 'badan publik', 'nama instansi', 'instansi'] },
+  { key: 'kategori', label: 'Kategori', aliases: ['kategori', 'category'] },
+  { key: 'website', label: 'Website', aliases: ['website', 'web', 'url'] },
+  { key: 'email', label: 'Email', aliases: ['email', 'email badan publik'] },
+  { key: 'lembaga', label: 'Lembaga', aliases: ['lembaga', 'instansi penguji', 'group'] },
+  { key: 'pertanyaan', label: 'Pertanyaan', aliases: ['pertanyaan', 'question', 'permohonan'] },
+  { key: 'nama_penguji', label: 'Nama Penguji Akses', aliases: ['nama penguji akses', 'nama penguji'] },
+  { key: 'email_penguji', label: 'Email Penguji', aliases: ['email penguji', 'email penguji akses'] },
+  { key: 'no_hp_penguji', label: 'No HP Penguji', aliases: ['no hp', 'nomor hp', 'nomer hp', 'hp', 'phone', 'telepon', 'telp'] }
+];
+
 const BadanPublik = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -46,6 +58,20 @@ const BadanPublik = () => {
     return init;
   });
   const [importError, setImportError] = useState('');
+  const [importAssignOpen, setImportAssignOpen] = useState(false);
+  const [importAssignPreview, setImportAssignPreview] = useState([]);
+  const [importAssignHeaders, setImportAssignHeaders] = useState([]);
+  const [importAssignRows, setImportAssignRows] = useState([]);
+  const [importAssignMapping, setImportAssignMapping] = useState(() => {
+    const init = {};
+    assignmentImportFields.forEach((f) => {
+      init[f.key] = '';
+    });
+    return init;
+  });
+  const [importAssignError, setImportAssignError] = useState('');
+  const [importAssignLoading, setImportAssignLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [emailFilter, setEmailFilter] = useState('all');
   const [holidays, setHolidays] = useState([]);
   const [monitoringMap, setMonitoringMap] = useState(() => getMonitoringMap());
@@ -83,6 +109,10 @@ const BadanPublik = () => {
     if (emailFilter === 'with-email') return data.filter((d) => d.email);
     if (emailFilter === 'no-email') return data.filter((d) => !d.email);
     return data;
+  }, [data, emailFilter]);
+
+  useEffect(() => {
+    setSelectedIds([]);
   }, [data, emailFilter]);
 
   const openForm = (item) => {
@@ -143,6 +173,38 @@ const BadanPublik = () => {
       fetchData();
     } catch (err) {
       setStatusMessage(err.response?.data?.message || 'Gagal menghapus data');
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredData.length) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(filteredData.map((item) => item.id));
+  };
+
+  const handleBulkDelete = async () => {
+    if (!isAdmin) {
+      setStatusMessage('Akses ditolak: hanya admin yang bisa menghapus data.');
+      return;
+    }
+    if (selectedIds.length === 0) {
+      setStatusMessage('Pilih minimal satu data untuk dihapus.');
+      return;
+    }
+    if (!confirm(`Hapus ${selectedIds.length} data badan publik?`)) return;
+    try {
+      const res = await api.post('/badan-publik/bulk-delete', { ids: selectedIds });
+      setStatusMessage(res.data?.message || `Berhasil menghapus ${selectedIds.length} data.`);
+      setSelectedIds([]);
+      fetchData();
+    } catch (err) {
+      setStatusMessage(err.response?.data?.message || 'Gagal menghapus data terpilih');
     }
   };
 
@@ -213,6 +275,33 @@ const BadanPublik = () => {
     setImportPreview(previewObjs.slice(0, 5));
   }, [importRows, importHeaders, importMapping]);
 
+  const buildAssignPreview = (rows, header, mapping) =>
+    rows.map((r) => {
+      const rowMap = Object.fromEntries(header.map((h, idx) => [h, r[idx]]));
+      const obj = {
+        nama_badan_publik: '',
+        kategori: '',
+        website: '',
+        email: '',
+        lembaga: '',
+        pertanyaan: '',
+        nama_penguji: '',
+        email_penguji: '',
+        no_hp_penguji: ''
+      };
+      assignmentImportFields.forEach((f) => {
+        const selectedHeader = mapping[f.key];
+        obj[f.key] = String(rowMap[selectedHeader] ?? '').trim();
+      });
+      return obj;
+    });
+
+  useEffect(() => {
+    if (!importAssignRows.length) return;
+    const previewObjs = buildAssignPreview(importAssignRows, importAssignHeaders, importAssignMapping);
+    setImportAssignPreview(previewObjs.slice(0, 5));
+  }, [importAssignRows, importAssignHeaders, importAssignMapping]);
+
   const submitImport = async () => {
     if (!isAdmin) {
       setImportError('Akses ditolak: import hanya untuk admin.');
@@ -255,6 +344,94 @@ const BadanPublik = () => {
     }
   };
 
+  const handleImportAssignFile = async (e) => {
+    if (!isAdmin) {
+      setImportAssignError('Akses ditolak: import hanya untuk admin.');
+      return;
+    }
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportAssignError('');
+    setImportAssignPreview([]);
+    setImportAssignHeaders([]);
+    setImportAssignRows([]);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      if (!rows.length) {
+        setImportAssignError('File kosong.');
+        return;
+      }
+      const header = rows[0].map((h) => String(h || '').trim());
+      const dataRows = rows.slice(1).filter((r) => r.some((cell) => String(cell || '').trim()));
+      setImportAssignHeaders(header);
+      setImportAssignRows(dataRows);
+
+      const lowerHeader = header.map((h) => h.toLowerCase());
+      const nextMap = {};
+      assignmentImportFields.forEach((f) => {
+        const idx = lowerHeader.findIndex((h) => f.aliases.some((alias) => h.includes(alias)));
+        nextMap[f.key] = idx >= 0 ? header[idx] : '';
+      });
+      setImportAssignMapping(nextMap);
+
+      const previewObjs = buildAssignPreview(dataRows, header, nextMap);
+      setImportAssignPreview(previewObjs.slice(0, 5));
+    } catch (err) {
+      console.error(err);
+      setImportAssignError('Gagal membaca file. Pastikan format CSV/XLSX.');
+    }
+  };
+
+  const submitImportAssign = async () => {
+    if (!isAdmin) {
+      setImportAssignError('Akses ditolak: import hanya untuk admin.');
+      return;
+    }
+    const missing = ['nama_badan_publik', 'kategori'].filter((key) => !importAssignMapping[key]);
+    if (missing.length) {
+      setImportAssignError(`Pilih kolom untuk: ${missing.map((m) => m.replace(/_/g, ' ')).join(', ')}`);
+      return;
+    }
+    if (importAssignRows.length === 0) {
+      setImportAssignError('Tidak ada data untuk diimport.');
+      return;
+    }
+
+    const mapped = buildAssignPreview(importAssignRows, importAssignHeaders, importAssignMapping);
+    try {
+      setImportAssignLoading(true);
+      const payloadRecords = mapped.map((r) => ({
+        nama_badan_publik: r.nama_badan_publik,
+        kategori: r.kategori,
+        website: r.website,
+        email: r.email,
+        lembaga: r.lembaga,
+        pertanyaan: r.pertanyaan,
+        nama_penguji: r.nama_penguji,
+        email_penguji: r.email_penguji,
+        no_hp_penguji: r.no_hp_penguji
+      }));
+      const res = await api.post('/badan-publik/import-assign', { records: payloadRecords });
+      setImportAssignError('');
+      setImportAssignOpen(false);
+      setStatusMessage(res.data?.message || `Import berhasil (${payloadRecords.length} data).`);
+      setImportAssignHeaders([]);
+      setImportAssignRows([]);
+      setImportAssignPreview([]);
+      const resetMap = {};
+      assignmentImportFields.forEach((f) => (resetMap[f.key] = ''));
+      setImportAssignMapping(resetMap);
+      fetchData();
+    } catch (err) {
+      setImportAssignError(err.response?.data?.message || 'Gagal import + penugasan');
+    } finally {
+      setImportAssignLoading(false);
+    }
+  };
+
   const updateMonitoring = (id, updates) => {
     setMonitoringMap((prev) => {
       const next = {
@@ -287,6 +464,12 @@ const BadanPublik = () => {
               Import CSV/Excel
             </button>
             <button
+              onClick={() => setImportAssignOpen(true)}
+              className="bg-emerald-600 text-white px-4 py-3 rounded-xl font-semibold shadow-soft hover:bg-emerald-700"
+            >
+              Import + Penugasan
+            </button>
+            <button
               onClick={() => openForm(null)}
               className="bg-primary text-white px-4 py-3 rounded-xl font-semibold shadow-soft hover:bg-emerald-700"
             >
@@ -298,6 +481,18 @@ const BadanPublik = () => {
 
       {statusMessage && (
         <div className="p-3 rounded-xl bg-white border border-slate-200 text-sm text-slate-700">{statusMessage}</div>
+      )}
+
+      {isAdmin && selectedIds.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
+          <span>{selectedIds.length} data dipilih</span>
+          <button
+            onClick={handleBulkDelete}
+            className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
+          >
+            Hapus terpilih
+          </button>
+        </div>
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-soft">
@@ -337,6 +532,16 @@ const BadanPublik = () => {
           <table className="min-w-full text-xs">
             <thead className="bg-gradient-to-r from-slate-50 to-white text-slate-600">
               <tr>
+                {isAdmin && (
+                  <th className="px-3 py-2 text-left w-[42px]">
+                    <input
+                      type="checkbox"
+                      aria-label="Pilih semua"
+                      checked={filteredData.length > 0 && selectedIds.length === filteredData.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 <th className="px-3 py-2 text-left w-[50px]">No</th>
                 <th className="px-3 py-2 text-left w-[28%]">Nama</th>
                 <th className="px-3 py-2 text-left w-[14%]">Kategori</th>
@@ -351,13 +556,13 @@ const BadanPublik = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="px-3 py-4 text-center text-slate-500" colSpan={isAdmin ? 8 : 7}>
+                  <td className="px-3 py-4 text-center text-slate-500" colSpan={isAdmin ? 10 : 9}>
                     Memuat data...
                   </td>
                 </tr>
               ) : filteredData.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-4 text-center text-slate-500" colSpan={isAdmin ? 8 : 7}>
+                  <td className="px-3 py-4 text-center text-slate-500" colSpan={isAdmin ? 10 : 9}>
                     Tidak ada data sesuai filter ini.
                   </td>
                 </tr>
@@ -367,6 +572,16 @@ const BadanPublik = () => {
                     key={item.id}
                     className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                   >
+                    {isAdmin && (
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          aria-label={`Pilih ${item.nama_badan_publik}`}
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelect(item.id)}
+                        />
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-slate-700">{idx + 1}</td>
                     <td className="px-3 py-2 font-semibold text-slate-900">{truncate(item.nama_badan_publik, 70)}</td>
                     <td className="px-3 py-2 text-slate-700">{truncate(item.kategori, 16)}</td>
@@ -737,6 +952,148 @@ const BadanPublik = () => {
                 className="px-5 py-3 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700"
               >
                 Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importAssignOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-[96vw] max-w-7xl p-6 space-y-4 max-h-[94vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Import Badan Publik + Penugasan</h2>
+                <p className="text-sm text-slate-600">
+                  Mapping kolom lengkap agar badan publik langsung ditugaskan. Jika penguji belum ada, badan publik tetap diimport dan status penugasan kosong.
+                </p>
+              </div>
+              <button
+                onClick={() => setImportAssignOpen(false)}
+                className="text-slate-500 hover:text-slate-800 text-xl font-bold"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Upload file</label>
+                <input
+                  type="file"
+                  accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                  onChange={handleImportAssignFile}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3"
+                />
+                {importAssignError && (
+                  <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                    {importAssignError}
+                  </div>
+                )}
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-600">
+                <div className="font-semibold text-slate-800 mb-1">Contoh header</div>
+                <pre className="whitespace-pre-wrap text-xs text-slate-600">
+                  Nama Badan Publik | KATEGORI | WEBSITE | email | LEMBAGA | pertanyaan | NAMA PENGUJI AKSES | email penguji | no hp
+                </pre>
+                <p className="text-xs text-slate-500 mt-2">
+                  Anda bisa menyesuaikan mapping kolom bila header berbeda.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {importAssignHeaders.length > 0 ? (
+                <div className="border border-slate-200 rounded-xl p-3 bg-white">
+                  <div className="text-sm font-semibold text-slate-800 mb-2">Pilih kolom sesuai field</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {assignmentImportFields.map((f) => (
+                      <div key={f.key} className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-600">{f.label}</label>
+                        <select
+                          value={importAssignMapping[f.key] || ''}
+                          onChange={(e) =>
+                            setImportAssignMapping((prev) => ({
+                              ...prev,
+                              [f.key]: e.target.value
+                            }))
+                          }
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
+                        >
+                          <option value="">-- pilih kolom --</option>
+                          {importAssignHeaders.map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">Header terdeteksi: {importAssignHeaders.join(' | ')}</p>
+                </div>
+              ) : (
+                <div className="border border-dashed border-slate-300 rounded-xl p-3 text-sm text-slate-600 bg-slate-50">
+                  Upload file terlebih dahulu untuk memilih mapping kolom.
+                </div>
+              )}
+
+              <div className="border-2 border-sky-200 bg-sky-50 rounded-xl p-3 shadow-soft">
+                <div className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-white border border-sky-200 text-[11px] font-bold text-sky-700 mb-2">
+                  Preview file (5 baris pertama)
+                </div>
+                <table className="w-full text-xs text-slate-700">
+                  <thead>
+                    <tr>
+                      <th className="text-left">Nama</th>
+                      <th className="text-left">Kategori</th>
+                      <th className="text-left">Email</th>
+                      <th className="text-left">Website</th>
+                      <th className="text-left">Lembaga</th>
+                      <th className="text-left">Penguji</th>
+                      <th className="text-left">Email Penguji</th>
+                      <th className="text-left">No HP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importAssignPreview.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-2 text-slate-500">
+                          Upload file untuk melihat preview.
+                        </td>
+                      </tr>
+                    ) : (
+                      importAssignPreview.slice(0, 3).map((row, idx) => (
+                        <tr key={idx}>
+                          <td className="py-1">{row.nama_badan_publik}</td>
+                          <td className="py-1">{row.kategori}</td>
+                          <td className="py-1">{truncate(row.email, 24)}</td>
+                          <td className="py-1">{truncate(row.website, 24)}</td>
+                          <td className="py-1">{truncate(row.lembaga, 18)}</td>
+                          <td className="py-1">{truncate(row.nama_penguji, 16)}</td>
+                          <td className="py-1">{truncate(row.email_penguji, 24)}</td>
+                          <td className="py-1">{truncate(row.no_hp_penguji, 14)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setImportAssignOpen(false)}
+                className="px-4 py-3 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={submitImportAssign}
+                disabled={importAssignLoading}
+                className="px-5 py-3 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {importAssignLoading ? 'Memproses...' : 'Import + Penugasan'}
               </button>
             </div>
           </div>

@@ -153,17 +153,28 @@ const Penugasan = () => {
     return filteredBadan.slice(start, start + pageSize);
   }, [filteredBadan, currentPage]);
 
+  const userNameMap = useMemo(() => {
+    const map = {};
+    users.forEach((u) => {
+      if (u?.id) {
+        map[u.id] = u.username || u.email || '';
+      }
+    });
+    return map;
+  }, [users]);
+
   const assignmentsMap = useMemo(() => {
     // Ambil satu penugas (terbaru dari API) per badan publik
     const map = {};
     allAssignments.forEach((a) => {
-      if (!a?.badan_publik_id || !a?.user) return;
+      if (!a?.badan_publik_id) return;
       if (!map[a.badan_publik_id]) {
-        map[a.badan_publik_id] = a.user.username;
+        const userId = a.user_id || a.user?.id;
+        map[a.badan_publik_id] = (userId && userNameMap[userId]) || a.user?.username || '';
       }
     });
     return map;
-  }, [allAssignments]);
+  }, [allAssignments, userNameMap]);
   const unassignedCount = useMemo(
     () => badan.filter((b) => !assignmentsMap[b.id]).length,
     [assignmentsMap, badan]
@@ -177,6 +188,15 @@ const Penugasan = () => {
     });
     return map;
   }, [pendingRequests]);
+
+  const assignedCountByUser = useMemo(() => {
+    const map = {};
+    allAssignments.forEach((a) => {
+      if (!a?.user_id) return;
+      map[a.user_id] = (map[a.user_id] || 0) + 1;
+    });
+    return map;
+  }, [allAssignments]);
 
   const badanSummary = useMemo(
     () =>
@@ -359,33 +379,32 @@ const Penugasan = () => {
                 Langkah 1
               </span>
             </div>
-            <div className="space-y-2 max-h-96 overflow-auto">
+            <div className="space-y-2 max-h-[90vh] overflow-auto">
               {filteredUsers.map((u) => (
-                  <div
-                    key={u.id}
-                    onClick={() => handleSelectUser(u.id)}
-                    className={`px-3 py-2 rounded-xl cursor-pointer border transition-all ${selectedUserId === u.id.toString()
-                      ? 'border-primary bg-emerald-50 text-emerald-700'
-                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-primary/50'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold">{u.username}</div>
+                <div
+                  key={u.id}
+                  onClick={() => handleSelectUser(u.id)}
+                  className={`px-3 py-2 rounded-xl cursor-pointer border transition-all ${selectedUserId === u.id.toString()
+                    ? 'border-primary bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-primary/50'
+                    }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold">{u.username}</div>
                       <span
-                        className={`text-[11px] px-2 py-1 rounded-full border ${pendingByUser[u.id]
-                          ? 'bg-amber-100 text-amber-700 border-amber-200'
-                          : (u.daily_quota ?? DEFAULT_QUOTA) > DEFAULT_QUOTA
-                          ? 'bg-slate-200 text-slate-800 border-slate-300'
-                          : 'bg-slate-100 text-slate-600 border-slate-200'
-                          }`}
+                        className={`text-[11px] px-2 py-1 rounded-full border ${
+                          pendingByUser[u.id]
+                            ? 'bg-amber-100 text-amber-700 border-amber-200'
+                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}
                       >
                         {pendingByUser[u.id]
                           ? `${pendingByUser[u.id]} req`
-                          : `kuota ${u.daily_quota ?? DEFAULT_QUOTA}/hari`}
+                          : `${assignedCountByUser[u.id] || 0} ditugaskan`}
                       </span>
                     </div>
                     <div className="text-xs text-slate-500">
-                      Kuota {u.daily_quota ?? DEFAULT_QUOTA}/hari - ID #{u.id}
+                      Ditugaskan: {assignedCountByUser[u.id] || 0} badan publik - ID #{u.id}
                     </div>
                   </div>
                 ))}

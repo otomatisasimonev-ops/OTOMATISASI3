@@ -5,7 +5,9 @@ import {
   createBadanPublik,
   updateBadanPublik,
   deleteBadanPublik,
-  importBadanPublik
+  deleteBadanPublikBulk,
+  importBadanPublik,
+  importBadanPublikWithAssignment
 } from '../controllers/badanPublikController.js';
 import { verifyToken } from '../middleware/verifyToken.js';
 import { checkRole } from '../middleware/checkRole.js';
@@ -17,7 +19,9 @@ router.get('/', listBadanPublik);
 router.get('/:id', getBadanPublik);
 router.post('/', checkRole('admin'), createBadanPublik);
 router.put('/:id', updateBadanPublik);
+router.post('/bulk-delete', checkRole('admin'), deleteBadanPublikBulk);
 router.delete('/:id', checkRole('admin'), deleteBadanPublik);
 router.post('/import', checkRole('admin'), importBadanPublik);
+router.post('/import-assign', checkRole('admin'), importBadanPublikWithAssignment);
 
 export default router;
