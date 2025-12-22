@@ -1,8 +1,8 @@
 import express from 'express';
-import { verifyToken } from '../middleware/verifyToken.js';
 import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
+import { verifyToken } from '../middleware/verifyToken.js';
 import {
   createReport,
   updateDraftReport,
@@ -15,23 +15,26 @@ import {
 
 const router = express.Router();
 
-router.use(verifyToken);
+// Constants
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/jpg'
+]);
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILES = 10;
 
-router.post('/', createReport);
-router.get('/me', listMyReports);
-router.get('/:id', getReportDetail);
-router.patch('/:id', updateDraftReport);
-router.patch('/:id/submit', submitReport);
-
-const allowedMime = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']);
-
+// Multer storage configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const reportId = req.params.id;
     const questionKey = String(req.body?.questionKey || req.query?.questionKey || '').trim();
+    
     if (!questionKey) {
       return cb(new Error('questionKey tidak valid'));
     }
+    
     const safeKey = questionKey.replace(/[^\w-]/g, '');
     const dir = ensureReportUploadDir(reportId, safeKey);
     cb(null, dir);
@@ -45,20 +48,32 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (req, file, cb) => {
-    if (!allowedMime.has(file.mimetype)) {
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       return cb(new Error('Tipe file tidak didukung (hanya gambar/pdf)'));
     }
     cb(null, true);
   }
 });
 
-router.post('/:id/upload', upload.array('files', 10), uploadEvidence);
+// Apply authentication to all routes
+router.use(verifyToken);
 
+// Report endpoints
+router.get('/me', listMyReports);
+router.get('/:id', getReportDetail);
+router.post('/', createReport);
+router.patch('/:id', updateDraftReport);
+router.patch('/:id/submit', submitReport);
+router.post('/:id/upload', upload.array('files', MAX_FILES), uploadEvidence);
+
+// Error handler for multer
 router.use((err, req, res, next) => {
-  if (!err) return next();
-  return res.status(400).json({ message: err.message || 'Upload gagal' });
+  if (err) {
+    return res.status(400).json({ message: err.message || 'Upload gagal' });
+  }
+  next();
 });
 
 export default router;

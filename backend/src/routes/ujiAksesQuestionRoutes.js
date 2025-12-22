@@ -13,11 +13,15 @@ import {
 const router = express.Router();
 
 router.use(verifyToken);
+
+// Public endpoints (all authenticated users)
 router.get('/', listQuestions);
+
+// Admin endpoints
 router.post('/', checkRole('admin'), createQuestion);
 router.post('/reset', checkRole('admin'), resetQuestions);
-router.delete('/all', checkRole('admin'), deleteAllQuestions);
 router.put('/:id', checkRole('admin'), updateQuestion);
+router.delete('/all', checkRole('admin'), deleteAllQuestions);
 router.delete('/:id', checkRole('admin'), deleteQuestion);
 
 export default router;

@@ -9,9 +9,11 @@ import { verifyToken } from '../middleware/verifyToken.js';
 
 const router = express.Router();
 
-router.post('/send', verifyToken, sendBulkEmail);
-router.get('/logs', verifyToken, getEmailLogs);
-router.get('/stream', verifyToken, streamEmailLogs);
-router.post('/retry/:id', verifyToken, retryEmail);
+router.use(verifyToken);
+
+router.get('/logs', getEmailLogs);
+router.get('/stream', streamEmailLogs);
+router.post('/send', sendBulkEmail);
+router.post('/retry/:id', retryEmail);
 
 export default router;

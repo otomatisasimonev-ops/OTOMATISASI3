@@ -5,13 +5,14 @@ import { checkRole } from '../middleware/checkRole.js';
 
 const router = express.Router();
 
-// User can view assignments self
-router.get('/me', verifyToken, listMyAssignments);
+router.use(verifyToken);
 
-// Admin-only endpoints
-router.use(verifyToken, checkRole('admin'));
-router.get('/', listAssignments);
-router.get('/:userId', listAssignmentsByUser);
-router.post('/', assignToUser);
+// User endpoints
+router.get('/me', listMyAssignments);
+
+// Admin endpoints
+router.get('/', checkRole('admin'), listAssignments);
+router.get('/:userId', checkRole('admin'), listAssignmentsByUser);
+router.post('/', checkRole('admin'), assignToUser);
 
 export default router;
