@@ -9,6 +9,17 @@ export function setRefreshCookie(res, refreshToken) {
   });
 }
 
+export function setAccessCookie(res, accessToken) {
+  const isProd = process.env.NODE_ENV === "production";
+  res.cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "strict" : "lax",
+    maxAge: 15 * 60 * 1000, // 15 menit (sama dengan expiry JWT)
+    path: "/auth", 
+  });
+}
+
 export function clearRefreshCookie(res) {
   const isProd = process.env.NODE_ENV === "production";
 
@@ -17,5 +28,15 @@ export function clearRefreshCookie(res) {
     secure: isProd,
     sameSite: isProd ? "strict" : "lax",
     path: "/auth", // Harus sama dengan path saat set cookie
+  });
+}
+
+export function clearAccessCookie(res) {
+  const isProd = process.env.NODE_ENV === "production";
+  res.clearCookie("accessToken", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "strict" : "lax",
+    path: "/auth",
   });
 }

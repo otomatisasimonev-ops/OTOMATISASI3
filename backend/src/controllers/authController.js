@@ -2,7 +2,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { User } from "../models/index.js";
 import { generateRefreshToken, hashRefreshToken } from "../utils/tokens.js";
-import { setRefreshCookie, clearRefreshCookie } from "../utils/cookies.js";
+import {setRefreshCookie, clearRefreshCookie, setAccessCookie, clearAccessCookie} from "../utils/cookies.js";
 
 //Nambah fungsi buat login handler
 const login = async (req, res) => {
@@ -54,12 +54,12 @@ const login = async (req, res) => {
 
     // 4) Set cookie refresh (HttpOnly)
     setRefreshCookie(res, refreshToken);
+    setAccessCookie(res, accessToken);
 
     return res.status(200).json({
       status: "Success",
       message: "Login berhasil",
       user: safeUserData,
-      accessToken,
     });
   } catch (error) {
     console.error(error);
@@ -76,6 +76,7 @@ const logout = async (req, res) => {
 
     // Selalu clear cookie (idempotent)
     clearRefreshCookie(res);
+    clearAccessCookie(res);
 
     if (!refreshToken) {
       return res.status(200).json({ msg: "Logged out successfully1" });
