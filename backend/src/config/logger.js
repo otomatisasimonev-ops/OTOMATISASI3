@@ -46,7 +46,7 @@ const consoleFormat = winston.format.combine(
 
 // rotasi file log harian
 const allLogsTransport = new DailyRotateFile({
-    filename: path.join(__dirname, '../logs/combined-%DATE%.log'),
+    filename: path.join(__dirname, '../../logs/combined-%DATE%.log'),
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
     maxFiles: '14d',
@@ -56,7 +56,7 @@ const allLogsTransport = new DailyRotateFile({
 //rotasi file log error harian
 const errorLogsTransport = new DailyRotateFile({
     level: 'error',
-    filename: path.join(__dirname, '../logs/error-%DATE%.log'),
+    filename: path.join(__dirname, '../../logs/error-%DATE%.log'),
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
     maxFiles: '30d',
