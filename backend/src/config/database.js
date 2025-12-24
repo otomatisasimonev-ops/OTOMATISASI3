@@ -14,6 +14,7 @@ const db = new Sequelize(DB_NAME, DB_USERNAME, DB_PASSWORD, {
   dialect: "mysql",
   //logging: (msg) => console.log("[SQL]", msg)
   logging: false,
+  port: process.env.DB_PORT || 3306,
 });
 
 export default db;
