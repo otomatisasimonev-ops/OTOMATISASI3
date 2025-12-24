@@ -93,8 +93,7 @@ const HistoryLog = () => {
       user.username
     )}`;
     
-    console.log('🔌 Creating SSE connection to:', streamUrl);
-    setStreamStatus('connecting');
+     setStreamStatus('connecting');
     
     let es = null;
     let isCleanedUp = false;
@@ -102,7 +101,6 @@ const HistoryLog = () => {
     // Delay untuk skip React Strict Mode double mount
     const timeoutId = setTimeout(() => {
       if (isCleanedUp) {
-        console.log('⚠️ Cleanup already called, skipping SSE creation');
         return;
       }
       
@@ -114,17 +112,15 @@ const HistoryLog = () => {
       eventSourceRef.current = es;
 
       es.onopen = (e) => {
-        console.log('✅ SSE connected successfully', e);
         setStreamStatus('live');
       };
       
       es.onerror = (err) => {
         console.error('❌ SSE error:', err);
-        console.log('ReadyState:', es?.readyState);
+
         
         // Jangan set offline jika sedang reconnecting
         if (es?.readyState === EventSourcePolyfill.CONNECTING) {
-          console.log('🔄 Reconnecting...');
           setStreamStatus('connecting');
         } else {
           setStreamStatus('offline');
@@ -132,7 +128,6 @@ const HistoryLog = () => {
       };
       
       es.onmessage = (event) => {
-        console.log('📨 SSE message received:', event.data);
         try {
           const data = JSON.parse(event.data);
           mergeLog(data);
@@ -147,7 +142,6 @@ const HistoryLog = () => {
       clearTimeout(timeoutId);
       
       if (es || eventSourceRef.current) {
-        console.log('🔌 Closing SSE connection');
         es?.close();
         eventSourceRef.current?.close();
         eventSourceRef.current = null;
