@@ -1,11 +1,9 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import api, { setAccessToken, clearAccessToken } from '../services/api';
+import api from '../services/api';
 
 const AuthContext = createContext(null);
 
-// Penyimpanan state auth + helper login/logout
 export const AuthProvider = ({ children }) => {
-  // HANYA simpan minimal user info (id, username, role) - TIDAK termasuk token
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
     return saved ? JSON.parse(saved) : null;
@@ -13,31 +11,19 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Restore session saat pertama kali mount
   useEffect(() => {
     const restoreSession = async () => {
       const savedUser = localStorage.getItem('user');
-      
-      // Jika tidak ada user tersimpan, skip restore
+
       if (!savedUser) {
         setIsInitializing(false);
         return;
       }
 
-      try {
-        // Coba refresh token untuk mendapatkan access token baru
-        const { data } = await api.post('/auth/refresh');
-        setAccessToken(data.accessToken);
-        // User sudah di-set dari localStorage di initial state
-      } catch (err) {
-        // Refresh token expired/invalid, clear user data
-        console.warn('Session restore gagal, silakan login ulang');
-        setUser(null);
-        localStorage.removeItem('user');
-        clearAccessToken();
-      } finally {
-        setIsInitializing(false);
-      }
+
+      // HAPUS call explicit, biarkan interceptor handle
+      setUser(JSON.parse(savedUser));
+      setIsInitializing(false);
     };
 
     restoreSession();
@@ -47,24 +33,21 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await api.post('/auth/login', { username, password });
-      
-      // Simpan access token di memory (BUKAN di localStorage)
-      setAccessToken(response.data.accessToken);
-      
-      // Simpan minimal user info ke localStorage (tanpa token sensitif)
+
       const userInfo = {
         id: response.data.user.id,
         username: response.data.user.username,
         role: response.data.user.role,
       };
+
       setUser(userInfo);
       localStorage.setItem('user', JSON.stringify(userInfo));
-      
+
       return { success: true };
     } catch (err) {
-      return { 
-        success: false, 
-        message: err.response?.data?.message || 'Login gagal' 
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Login gagal'
       };
     } finally {
       setLoading(false);
@@ -74,21 +57,16 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     setLoading(true);
     try {
-      // Panggil logout endpoint untuk clear refresh token cookie
       await api.post('/auth/logout');
     } catch (err) {
-      console.error('Logout error:', err);
+      // Silently handle logout errors
     } finally {
-      // Clear access token dari memory
-      clearAccessToken();
-      // Clear user info dari state dan localStorage
       setUser(null);
       localStorage.removeItem('user');
       setLoading(false);
     }
   };
 
-  // Show loading screen saat initialize session
   if (isInitializing) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -101,18 +79,22 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        isAuthenticated: Boolean(user),
-        login,
-        logout
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      login,
+      logout,
+      loading,
+      isAuthenticated: !!user
+    }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};

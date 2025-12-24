@@ -11,6 +11,7 @@ export const loginLimiter = rateLimit({
   },
   standardHeaders: true, // Return rate limit info di `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  skipSuccessfulRequests: true, // Hanya hitung request yang gagal
   // Skip rate limiting untuk IP tertentu jika diperlukan
   skip: (req) => {
     // Bisa ditambahkan whitelist IP jika perlu

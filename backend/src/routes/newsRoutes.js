@@ -4,6 +4,8 @@ import { listKipNews } from '../controllers/newsController.js';
 
 const router = express.Router();
 
-router.get('/kip', verifyToken, listKipNews);
+router.use(verifyToken);
+
+router.get('/kip', listKipNews);
 
 export default router;

@@ -1,23 +1,27 @@
 import express from 'express';
-import { getMeQuota,
+import {
+  getMeQuota,
   setUserQuota,
   createQuotaRequest,
   listQuotaRequests,
   updateQuotaRequest,
-  listMyQuotaRequests } from '../controllers/quotaController.js';
+  listMyQuotaRequests
+} from '../controllers/quotaController.js';
 import { verifyToken } from '../middleware/verifyToken.js';
 import { checkRole } from '../middleware/checkRole.js';
 
 const router = express.Router();
 
 router.use(verifyToken);
-router.get('/me', getMeQuota);
-router.post('/request', createQuotaRequest);
-router.get('/my-requests', listMyQuotaRequests);
 
-router.use(checkRole('admin'));
-router.get('/requests', listQuotaRequests);
-router.patch('/requests/:id', updateQuotaRequest);
-router.patch('/user/:userId', setUserQuota);
+// User endpoints
+router.get('/me', getMeQuota);
+router.get('/my-requests', listMyQuotaRequests);
+router.post('/request', createQuotaRequest);
+
+// Admin endpoints
+router.get('/requests', checkRole('admin'), listQuotaRequests);
+router.patch('/requests/:id', checkRole('admin'), updateQuotaRequest);
+router.patch('/user/:userId', checkRole('admin'), setUserQuota);
 
 export default router;

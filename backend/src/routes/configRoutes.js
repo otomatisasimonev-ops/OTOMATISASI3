@@ -4,9 +4,11 @@ import { verifyToken } from '../middleware/verifyToken.js';
 
 const router = express.Router();
 
-router.post('/smtp', verifyToken, saveSmtpConfig);
-router.post('/smtp/verify', verifyToken, verifySmtpConfig);
-router.post('/imap/verify', verifyToken, verifyImapConfig);
-router.get('/check', verifyToken, checkSmtpConfig);
+router.use(verifyToken);
+
+router.get('/check', checkSmtpConfig);
+router.post('/smtp', saveSmtpConfig);
+router.post('/smtp/verify', verifySmtpConfig);
+router.post('/imap/verify', verifyImapConfig);
 
 export default router;

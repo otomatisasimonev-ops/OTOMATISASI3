@@ -1,12 +1,10 @@
 import db from "../config/database.js";
-
 import User from "./user.js";
 import BadanPublik from "./badanPublik.js";
 import SmtpConfig from "./smtpConfig.js";
 import EmailLog from "./emailLog.js";
 import Assignment from "./assignment.js";
 import QuotaRequest from "./quotaRequest.js";
-import AssignmentHistory from "./assignmentHistory.js";
 import Holiday from "./holiday.js";
 import UjiAksesReport from "./ujiAksesReport.js";
 import UjiAksesQuestion from "./ujiAksesQuestion.js";
@@ -43,10 +41,6 @@ BadanPublik.belongsToMany(User, {
 User.hasMany(QuotaRequest, { foreignKey: "user_id", as: "quotaRequests" });
 QuotaRequest.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
-AssignmentHistory.belongsTo(User, { foreignKey: "actor_id", as: "actor" });
-AssignmentHistory.belongsTo(User, { foreignKey: "user_id", as: "assignee" });
-AssignmentHistory.belongsTo(BadanPublik, { foreignKey: "badan_publik_id", as: "badanPublik" });
-
 User.hasMany(UjiAksesReport, { foreignKey: "user_id", as: "ujiAksesReports" });
 UjiAksesReport.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
@@ -69,7 +63,6 @@ export {
   EmailLog,
   Assignment,
   QuotaRequest,
-  AssignmentHistory,
   Holiday,
   UjiAksesReport,
   UjiAksesQuestion,

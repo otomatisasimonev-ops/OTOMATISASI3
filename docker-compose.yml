@@ -1,12 +1,55 @@
+version: "3.9"
+
 services:
-  app:
-    build:
-      context: .
-    ports:
-      - "8080:8080"
-      - "5000:5000"
+  db:
+    image: mysql:8.0
+    container_name: oto2_db
     environment:
-      PORT: 8080
-      BACKEND_PORT: 5000
+      MYSQL_DATABASE: oto2_db
+      MYSQL_USER: oto2_db
+      MYSQL_PASSWORD: oto2_db_pass
+      MYSQL_ROOT_PASSWORD: rootpass
+    ports:
+      - "3306:3306"
     volumes:
-      - ./backend/uploads:/app/uploads
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -prootpass || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: node:20
+    container_name: backend
+    working_dir: /app
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    command: sh -c "npm ci || npm install; node server.js"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: node:20
+    container_name: frontend
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    env_file:
+      - ./frontend/.env
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm ci || npm install; npm run dev"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:

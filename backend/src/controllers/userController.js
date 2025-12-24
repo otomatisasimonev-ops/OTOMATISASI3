@@ -1,122 +1,167 @@
-import bcrypt from 'bcrypt';
-import { Op } from 'sequelize';
-import { User, Assignment, AssignmentHistory, SmtpConfig, EmailLog, QuotaRequest } from '../models/index.js';
+import bcrypt from "bcrypt";
+import {
+  User,
+  Assignment,
+  SmtpConfig,
+  EmailLog,
+  QuotaRequest,
+} from "../models/index.js";
 
+// Constants
 const SALT_ROUNDS = 10;
+const DEFAULT_DAILY_QUOTA = 20;
+const VALID_ROLES = ["user", "admin"];
 
-const normalizeValue = (value) => String(value ?? '').trim();
+// Helper functions
+const normalizeValue = (value) => String(value ?? "").trim();
+
 const normalizeEmail = (value) => {
   const email = normalizeValue(value);
-  return email ? email.toLowerCase() : '';
-};
-const isValidEmail = (val) => {
-  if (!val) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+  return email ? email.toLowerCase() : "";
 };
 
-// REGISTER //baru nambahin pasword dan bcrypt
+const isValidEmail = (email) => {
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+const hashPassword = async (password) => {
+  return bcrypt.hash(password, SALT_ROUNDS);
+};
+
+const deleteUserRelatedData = async (userIds) => {
+  const ids = Array.isArray(userIds) ? userIds : [userIds];
+
+  await Promise.all([
+    Assignment.destroy({ where: { user_id: ids } }),
+    SmtpConfig.destroy({ where: { user_id: ids } }),
+    QuotaRequest.destroy({ where: { user_id: ids } }),
+    EmailLog.destroy({ where: { user_id: ids } }),
+  ]);
+};
+
+// Create user (register)
 const createUser = async (req, res) => {
   try {
-    const payload = req.body || {};
-    const username = normalizeValue(payload.username);
-    const password = payload.password;
-    const role = payload.role === 'admin' ? 'admin' : 'user';
-    const group = normalizeValue(payload.group);
-    const nomerHp = normalizeValue(payload.nomer_hp);
-    const email = normalizeEmail(payload.email);
+    const { username, password, role, group, nomer_hp, email } = req.body;
+    const trimmedUsername = normalizeValue(username);
+    const trimmedGroup = normalizeValue(group);
+    const trimmedNomerHp = normalizeValue(nomer_hp);
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!username) {
-      return res.status(400).json({ message: 'Username wajib diisi' });
+    if (!trimmedUsername) {
+      return res.status(400).json({ message: "Username wajib diisi" });
     }
+
     if (!password) {
-      return res.status(400).json({ message: 'Password wajib diisi' });
-    }
-    if (email && !isValidEmail(email)) {
-      return res.status(400).json({ message: 'Email tidak valid' });
+      return res.status(400).json({ message: "Password wajib diisi" });
     }
 
-    const existing = await User.findOne({ where: { username } });
-    if (existing) {
-      return res.status(400).json({ message: 'Username sudah terdaftar' });
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ message: "Email tidak valid" });
     }
 
-    const encryptPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    await User.create({
-      username,
-      password: encryptPassword,
-      role,
-      daily_quota: 20,
-      group: group || null,
-      nomer_hp: nomerHp || null,
-      email: email || null
+    const existing = await User.findOne({
+      where: { username: trimmedUsername },
     });
-    return res.status(201).json({ message: 'User berhasil dibuat' });
+    if (existing) {
+      return res.status(400).json({ message: "Username sudah terdaftar" });
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    await User.create({
+      username: trimmedUsername,
+      password: hashedPassword,
+      role: role === "admin" ? "admin" : "user",
+      daily_quota: DEFAULT_DAILY_QUOTA,
+      group: trimmedGroup || null,
+      nomer_hp: trimmedNomerHp || null,
+      email: normalizedEmail || null,
+    });
+
+    return res.status(201).json({ message: "User berhasil dibuat" });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: 'Gagal membuat user' });
+    return res.status(500).json({ message: "Gagal membuat user" });
   }
 };
 
+// Reset user password (admin)
 const resetUserPassword = async (req, res) => {
   try {
     const { id } = req.params;
-    const payload = req.body || {};
-    const newPassword = normalizeValue(payload.password || payload.newPassword);
-    if (!newPassword) {
-      return res.status(400).json({ message: 'Password baru wajib diisi' });
+    const { password, newPassword } = req.body;
+    const passwordToSet = normalizeValue(password || newPassword);
+
+    if (!passwordToSet) {
+      return res.status(400).json({ message: "Password baru wajib diisi" });
     }
+
     const user = await User.findByPk(id);
     if (!user) {
-      return res.status(404).json({ message: 'User tidak ditemukan' });
+      return res.status(404).json({ message: "User tidak ditemukan" });
     }
-    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    const hashedPassword = await hashPassword(passwordToSet);
     await user.update({ password: hashedPassword });
-    return res.json({ message: 'Password berhasil direset' });
-  }
-  catch (err) {
+
+    return res.json({ message: "Password berhasil direset" });
+  } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Gagal mereset password' });
+    return res.status(500).json({ message: "Gagal mereset password" });
   }
 };
 
+// Import users from CSV/Excel
 const importUsers = async (req, res) => {
   try {
-    const { records } = req.body || {};
-    if (!Array.isArray(records) || records.length === 0) {
-      return res.status(400).json({ message: 'Data kosong' });
+    const { records } = req.body;
+
+    if (!Array.isArray(records) || !records.length) {
+      return res.status(400).json({ message: "Data kosong" });
     }
 
+    // Normalize records
     const cleaned = records.map((record) => {
-      const group = normalizeValue(record.group ?? record.Group ?? record.grup ?? record.kelompok ?? '');
+      const group = normalizeValue(
+        record.group ?? record.Group ?? record.grup ?? record.kelompok
+      );
       const nomerHp = normalizeValue(
         record.nomer_hp ??
-          record['nomer hp'] ??
-          record['nomor hp'] ??
+          record["nomer hp"] ??
+          record["nomor hp"] ??
           record.no_hp ??
           record.hp ??
           record.phone ??
           record.telepon ??
-          record.telp ??
-          ''
+          record.telp
       );
-      const email = normalizeEmail(record.email ?? record.Email ?? '');
-      const username = normalizeValue(record.username ?? record.Username ?? '') || email || nomerHp;
-      return {
-        group,
-        nomer_hp: nomerHp,
-        email,
-        username
-      };
+      const email = normalizeEmail(record.email ?? record.Email);
+      const username =
+        normalizeValue(record.username ?? record.Username) || email || nomerHp;
+
+      return { group, nomer_hp: nomerHp, email, username };
     });
 
+    // Filter valid rows
     const validRows = cleaned.filter(
-      (row) => row.username && row.group && row.nomer_hp && row.email && isValidEmail(row.email)
+      (row) =>
+        row.username &&
+        row.group &&
+        row.nomer_hp &&
+        row.email &&
+        isValidEmail(row.email)
     );
 
     if (!validRows.length) {
-      return res.status(400).json({ message: 'Tidak ada baris valid (username, group, nomor hp, email wajib).' });
+      return res.status(400).json({
+        message:
+          "Tidak ada baris valid (username, group, nomor hp, email wajib).",
+      });
     }
 
+    // Deduplicate by username (case-insensitive)
     const uniqueMap = new Map();
     validRows.forEach((row) => {
       const key = row.username.toLowerCase();
@@ -126,57 +171,76 @@ const importUsers = async (req, res) => {
     });
     const uniqueRows = Array.from(uniqueMap.values());
 
+    // Check existing users
     const existing = uniqueRows.length
       ? await User.findAll({
-          where: { username: { [Op.in]: uniqueRows.map((row) => row.username) } },
-          attributes: ['username']
+          where: { username: uniqueRows.map((row) => row.username) },
+          attributes: ["username"],
         })
       : [];
+
     const existingSet = new Set(existing.map((u) => u.username.toLowerCase()));
-    const finalRows = uniqueRows.filter((row) => !existingSet.has(row.username.toLowerCase()));
-
-    if (!finalRows.length) {
-      return res.status(400).json({ message: 'Semua username sudah terdaftar.' });
-    }
-
-    const hashedPasswords = await Promise.all(
-      finalRows.map((row) => bcrypt.hash(row.nomer_hp, SALT_ROUNDS))
+    const finalRows = uniqueRows.filter(
+      (row) => !existingSet.has(row.username.toLowerCase())
     );
 
-    const payload = finalRows.map((row, idx) => ({
+    if (!finalRows.length) {
+      return res
+        .status(400)
+        .json({ message: "Semua username sudah terdaftar." });
+    }
+
+    // Hash passwords in parallel
+    const hashedPasswords = await Promise.all(
+      finalRows.map((row) => hashPassword(row.nomer_hp))
+    );
+
+    // Create users
+    const userPayload = finalRows.map((row, idx) => ({
       username: row.username,
       password: hashedPasswords[idx],
-      role: 'user',
-      daily_quota: 20,
+      role: "user",
+      daily_quota: DEFAULT_DAILY_QUOTA,
       group: row.group,
       nomer_hp: row.nomer_hp,
-      email: row.email || null
+      email: row.email || null,
     }));
 
-    await User.bulkCreate(payload);
+    await User.bulkCreate(userPayload);
 
-    const skippedInvalid = cleaned.length - validRows.length;
-    const skippedDuplicateFile = validRows.length - uniqueRows.length;
-    const skippedExisting = uniqueRows.length - finalRows.length;
+    const stats = {
+      imported: userPayload.length,
+      skippedInvalid: cleaned.length - validRows.length,
+      skippedDuplicateFile: validRows.length - uniqueRows.length,
+      skippedExisting: uniqueRows.length - finalRows.length,
+    };
 
     return res.json({
-      message: `Import berhasil: ${payload.length} masuk. Lewat: ${skippedInvalid} invalid, ${skippedDuplicateFile} duplikat file, ${skippedExisting} sudah ada.`
+      message: `Import berhasil: ${stats.imported} masuk. Lewat: ${stats.skippedInvalid} invalid, ${stats.skippedDuplicateFile} duplikat file, ${stats.skippedExisting} sudah ada.`,
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Gagal import user' });
+    return res.status(500).json({ message: "Gagal import user" });
   }
 };
 
-
-// List users (admin)
-const listUsers = async (_req, res) => {
+// List all users (admin)
+const listUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'username', 'role', 'daily_quota', 'group', 'nomer_hp', 'email'],
-      include: [{ model: SmtpConfig, as: 'smtpConfig', attributes: ['id'] }],
-      order: [['id', 'ASC']]
+      attributes: [
+        "id",
+        "username",
+        "role",
+        "daily_quota",
+        "group",
+        "nomer_hp",
+        "email",
+      ],
+      include: [{ model: SmtpConfig, as: "smtpConfig", attributes: ["id"] }],
+      order: [["id", "ASC"]],
     });
+
     const mapped = users.map((u) => ({
       id: u.id,
       username: u.username,
@@ -185,176 +249,192 @@ const listUsers = async (_req, res) => {
       group: u.group,
       nomer_hp: u.nomer_hp,
       email: u.email,
-      hasSmtp: Boolean(u.smtpConfig)
+      hasSmtp: Boolean(u.smtpConfig),
     }));
+
     return res.json(mapped);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Gagal mengambil user' });
+    return res.status(500).json({ message: "Gagal mengambil user" });
   }
 };
 
-// User info self
+// Get current user info
 const getMe = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
       attributes: [
-        'id',
-        'username',
-        'role',
-        'daily_quota',
-        'used_today',
-        'last_reset_date',
-        'group',
-        'nomer_hp',
-        'email'
-      ]
+        "id",
+        "username",
+        "role",
+        "daily_quota",
+        "used_today",
+        "last_reset_date",
+        "group",
+        "nomer_hp",
+        "email",
+      ],
     });
-    if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+    if (!user) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
     return res.json(user);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Gagal mengambil profil' });
+    return res.status(500).json({ message: "Gagal mengambil profil" });
   }
 };
 
+// Update own password
 const updateMyPassword = async (req, res) => {
   try {
-    const payload = req.body || {};
-    const currentPassword = normalizeValue(payload.currentPassword);
-    const newPassword = normalizeValue(payload.newPassword);
+    const { currentPassword, newPassword } = req.body;
+    const trimmedCurrentPassword = normalizeValue(currentPassword);
+    const trimmedNewPassword = normalizeValue(newPassword);
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ message: 'Password lama dan baru wajib diisi' });
+    if (!trimmedCurrentPassword || !trimmedNewPassword) {
+      return res
+        .status(400)
+        .json({ message: "Password lama dan baru wajib diisi" });
     }
 
     const user = await User.findByPk(req.user.id);
     if (!user) {
-      return res.status(404).json({ message: 'User tidak ditemukan' });
+      return res.status(404).json({ message: "User tidak ditemukan" });
     }
 
-    const ok = await bcrypt.compare(currentPassword, user.password);
-    if (!ok) {
-      return res.status(400).json({ message: 'Password lama salah' });
+    const isPasswordValid = await bcrypt.compare(
+      trimmedCurrentPassword,
+      user.password
+    );
+    if (!isPasswordValid) {
+      return res.status(400).json({ message: "Password lama salah" });
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    const hashedPassword = await hashPassword(trimmedNewPassword);
     await user.update({ password: hashedPassword });
-    return res.json({ message: 'Password berhasil diperbarui' });
+
+    return res.json({ message: "Password berhasil diperbarui" });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Gagal memperbarui password' });
+    return res.status(500).json({ message: "Gagal memperbarui password" });
   }
 };
 
-// Admin update role
+// Update user role (admin)
 const updateRole = async (req, res) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
-    if (!['user', 'admin'].includes(role)) {
-      return res.status(400).json({ message: 'Role harus user/admin' });
+
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ message: "Role harus user/admin" });
     }
+
     if (Number(id) === req.user.id) {
-      return res.status(400).json({ message: 'Tidak boleh mengganti role diri sendiri' });
+      return res
+        .status(400)
+        .json({ message: "Tidak boleh mengganti role diri sendiri" });
     }
+
     const user = await User.findByPk(id);
     if (!user) {
-      return res.status(404).json({ message: 'User tidak ditemukan' });
+      return res.status(404).json({ message: "User tidak ditemukan" });
     }
+
     await user.update({ role });
-    return res.json({ message: 'Role diperbarui', user: { id: user.id, role: user.role } });
+
+    return res.json({
+      message: "Role diperbarui",
+      user: { id: user.id, role: user.role },
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Gagal memperbarui role' });
+    return res.status(500).json({ message: "Gagal memperbarui role" });
   }
 };
 
+// Delete single user
 const deleteUser = async (req, res) => {
-    try {
-      const { id } = req.params;
-      const userId = Number(id);
+  try {
+    const { id } = req.params;
+    const userId = Number(id);
 
-      if (!userId || Number.isNaN(userId)) {
-        return res.status(400).json({ message: 'ID user tidak valid' });
-      }
-
-      if (userId === req.user.id) {
-        return res.status(400).json({ message: 'Tidak bisa menghapus akun sendiri' });
-      }
-
-      const user = await User.findByPk(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User tidak ditemukan' });
-      }
-
-      // Hapus penugasan dan histori terkait user ini
-      await Assignment.destroy({ where: { user_id: userId } });
-      await AssignmentHistory.destroy({
-        where: {
-          [Op.or]: [{ user_id: userId }, { actor_id: userId }]
-        }
-      });
-
-      // Hapus konfigurasi/kuota/log terkait user ini agar FK tidak menolak
-      await SmtpConfig.destroy({ where: { user_id: userId } });
-      await QuotaRequest.destroy({ where: { user_id: userId } });
-      await EmailLog.destroy({ where: { user_id: userId } });
-
-      await user.destroy();
-
-      return res.json({ message: 'User dihapus. Penugasan di-reset dan email log terkait dihapus.' });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Gagal menghapus user' });
+    if (!userId || Number.isNaN(userId)) {
+      return res.status(400).json({ message: "ID user tidak valid" });
     }
-  };
 
+    if (userId === req.user.id) {
+      return res
+        .status(400)
+        .json({ message: "Tidak bisa menghapus akun sendiri" });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    await deleteUserRelatedData(userId);
+    await user.destroy();
+
+    return res.json({
+      message:
+        "User dihapus. Penugasan di-reset dan email log terkait dihapus.",
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Gagal menghapus user" });
+  }
+};
+
+// Delete multiple users
 const deleteUsersBulk = async (req, res) => {
   try {
-    const { ids } = req.body || {};
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: 'IDs wajib diisi' });
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ message: "IDs wajib diisi" });
     }
 
-    const uniqueIds = Array.from(new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))));
-    if (uniqueIds.length === 0) {
-      return res.status(400).json({ message: 'IDs tidak valid' });
+    const uniqueIds = [
+      ...new Set(
+        ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))
+      ),
+    ];
+
+    if (!uniqueIds.length) {
+      return res.status(400).json({ message: "IDs tidak valid" });
     }
 
     const users = await User.findAll({
-      where: { id: { [Op.in]: uniqueIds } },
-      attributes: ['id', 'role']
+      where: { id: uniqueIds },
+      attributes: ["id", "role"],
     });
 
     const deletableIds = users
-      .filter((u) => u.role !== 'admin' && u.id !== req.user.id)
+      .filter((u) => u.role !== "admin" && u.id !== req.user.id)
       .map((u) => u.id);
 
-    if (deletableIds.length === 0) {
-      return res.status(400).json({ message: 'Tidak ada user yang bisa dihapus' });
+    if (!deletableIds.length) {
+      return res
+        .status(400)
+        .json({ message: "Tidak ada user yang bisa dihapus" });
     }
 
-    await Assignment.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
-    await AssignmentHistory.destroy({
-      where: {
-        [Op.or]: [{ user_id: { [Op.in]: deletableIds } }, { actor_id: { [Op.in]: deletableIds } }]
-      }
-    });
-    await SmtpConfig.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
-    await QuotaRequest.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
-    await EmailLog.destroy({ where: { user_id: { [Op.in]: deletableIds } } });
-
-    const deleted = await User.destroy({ where: { id: { [Op.in]: deletableIds } } });
+    await deleteUserRelatedData(deletableIds);
+    const deleted = await User.destroy({ where: { id: deletableIds } });
 
     return res.json({
       message: `Berhasil menghapus ${deleted} user.`,
       deleted,
-      skipped: uniqueIds.length - deletableIds.length
+      skipped: uniqueIds.length - deletableIds.length,
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Gagal menghapus user terpilih' });
+    return res.status(500).json({ message: "Gagal menghapus user terpilih" });
   }
 };
 
@@ -367,6 +447,5 @@ export {
   deleteUser,
   deleteUsersBulk,
   resetUserPassword,
-  importUsers
-}
-  
+  importUsers,
+};

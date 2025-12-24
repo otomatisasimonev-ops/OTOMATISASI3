@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EventSourcePolyfill } from 'event-source-polyfill';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fetchHolidays } from '../services/holidays';
@@ -19,6 +20,7 @@ const HistoryLog = () => {
   const [search, setSearch] = useState('');
   const [retryingId, setRetryingId] = useState(null);
   const [holidays, setHolidays] = useState([]);
+  const eventSourceRef = useRef(null);
 
   const baseUrl = useMemo(() => {
     const url = api.defaults?.baseURL || import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -86,28 +88,74 @@ const HistoryLog = () => {
 
   useEffect(() => {
     if (!user) return;
+    
     const streamUrl = `${baseUrl}/email/stream?userId=${user.id}&username=${encodeURIComponent(
       user.username
     )}`;
+    
+    console.log('🔌 Creating SSE connection to:', streamUrl);
     setStreamStatus('connecting');
-    const es = new EventSource(streamUrl);
-
-    es.onopen = () => setStreamStatus('live');
-    es.onerror = () => setStreamStatus('offline');
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        mergeLog(data);
-      } catch (err) {
-        console.error('Gagal parsing SSE', err);
+    
+    let es = null;
+    let isCleanedUp = false;
+    
+    // Delay untuk skip React Strict Mode double mount
+    const timeoutId = setTimeout(() => {
+      if (isCleanedUp) {
+        console.log('⚠️ Cleanup already called, skipping SSE creation');
+        return;
       }
-    };
+      
+      es = new EventSourcePolyfill(streamUrl, {
+        withCredentials: true,
+        heartbeatTimeout: 300000, // 5 menit
+      });
+      
+      eventSourceRef.current = es;
+
+      es.onopen = (e) => {
+        console.log('✅ SSE connected successfully', e);
+        setStreamStatus('live');
+      };
+      
+      es.onerror = (err) => {
+        console.error('❌ SSE error:', err);
+        console.log('ReadyState:', es?.readyState);
+        
+        // Jangan set offline jika sedang reconnecting
+        if (es?.readyState === EventSourcePolyfill.CONNECTING) {
+          console.log('🔄 Reconnecting...');
+          setStreamStatus('connecting');
+        } else {
+          setStreamStatus('offline');
+        }
+      };
+      
+      es.onmessage = (event) => {
+        console.log('📨 SSE message received:', event.data);
+        try {
+          const data = JSON.parse(event.data);
+          mergeLog(data);
+        } catch (err) {
+          console.error('Gagal parsing SSE', err, event.data);
+        }
+      };
+    }, 10); // 10ms delay untuk skip first cleanup di Strict Mode
 
     return () => {
-      es.close();
+      isCleanedUp = true;
+      clearTimeout(timeoutId);
+      
+      if (es || eventSourceRef.current) {
+        console.log('🔌 Closing SSE connection');
+        es?.close();
+        eventSourceRef.current?.close();
+        eventSourceRef.current = null;
+      }
       setStreamStatus('idle');
     };
-  }, [baseUrl, mergeLog, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseUrl, user]); // mergeLog tidak perlu di deps karena sudah useCallback stable
 
   const categories = useMemo(() => {
     const values = logs.map((l) => l.badanPublik?.kategori).filter(Boolean);

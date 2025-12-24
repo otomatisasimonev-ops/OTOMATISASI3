@@ -1,48 +1,60 @@
 import axios from 'axios';
 
-// In-memory token storage
-let accessToken = null;
-
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
-  withCredentials: true // WAJIB untuk mengirim cookie refresh token
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
 
-// Request Interceptor: inject access token ke setiap request
-api.interceptors.request.use((config) => {
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
-  }
-  return config;
-}, (error) => Promise.reject(error));
+// Variabel untuk mencegah multiple refresh bersamaan
+let isRefreshing = false;
+let failedQueue = [];
 
-// Response Interceptor: auto-refresh token saat 401/403
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // Jika error 401/403 dan belum pernah retry, coba refresh token
     if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Antrian request yang menunggu refresh selesai
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => api(originalRequest))
+          .catch((err) => Promise.reject(err));
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
-        // Request refresh token (cookie otomatis dikirim karena withCredentials: true)
-        const { data } = await axios.post(
+        await axios.post(
           `${api.defaults.baseURL}/auth/refresh`,
           {},
           { withCredentials: true }
         );
         
-        // Simpan access token baru ke memory
-        accessToken = data.accessToken;
-        
-        // Inject token baru ke request yang gagal dan retry
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        processQueue(null);
+        isRefreshing = false;
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh token gagal/expired, logout user
-        accessToken = null;
+        processQueue(refreshError, null);
+        isRefreshing = false;
         localStorage.removeItem('user');
         window.location.href = '/login';
         return Promise.reject(refreshError);
@@ -52,18 +64,5 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Export fungsi untuk set/clear token dari komponen lain
-export const setAccessToken = (token) => {
-  accessToken = token;
-};
-
-export const clearAccessToken = () => {
-  accessToken = null;
-};
-
-export const getAccessToken = () => {
-  return accessToken;
-};
 
 export default api;

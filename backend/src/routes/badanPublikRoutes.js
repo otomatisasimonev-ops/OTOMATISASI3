@@ -15,13 +15,17 @@ import { checkRole } from '../middleware/checkRole.js';
 const router = express.Router();
 
 router.use(verifyToken);
+
+// Public endpoints (all authenticated users)
 router.get('/', listBadanPublik);
 router.get('/:id', getBadanPublik);
-router.post('/', checkRole('admin'), createBadanPublik);
 router.put('/:id', updateBadanPublik);
-router.post('/bulk-delete', checkRole('admin'), deleteBadanPublikBulk);
-router.delete('/:id', checkRole('admin'), deleteBadanPublik);
+
+// Admin endpoints
+router.post('/', checkRole('admin'), createBadanPublik);
 router.post('/import', checkRole('admin'), importBadanPublik);
 router.post('/import-assign', checkRole('admin'), importBadanPublikWithAssignment);
+router.post('/bulk-delete', checkRole('admin'), deleteBadanPublikBulk);
+router.delete('/:id', checkRole('admin'), deleteBadanPublik);
 
 export default router;
