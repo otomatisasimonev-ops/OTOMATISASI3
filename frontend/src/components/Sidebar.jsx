@@ -60,12 +60,12 @@ const Sidebar = () => {
   const links =
     user?.role === 'admin'
       ? [
-          ...baseLinks.slice(0, 1),
-          { to: '/laporan/uji-akses', label: 'Laporan Uji Akses (Saya)', icon: 'report' },
-          ...baseLinks.slice(1, 4),
-          ...adminLinks,
-          ...baseLinks.slice(4)
-        ]
+        ...baseLinks.slice(0, 1),
+        { to: '/laporan/uji-akses', label: 'Laporan Uji Akses (Saya)', icon: 'report' },
+        ...baseLinks.slice(1, 4),
+        ...adminLinks,
+        ...baseLinks.slice(4)
+      ]
       : [...baseLinks.slice(0, 1), { to: '/laporan/uji-akses', label: 'Laporan Uji Akses', icon: 'report' }, ...baseLinks.slice(1)];
 
   const renderIcon = (name) => {
@@ -151,36 +151,80 @@ const Sidebar = () => {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-64 bg-white/90 backdrop-blur border-r border-slate-200 shadow-soft">
-      <div className="px-6 py-6">
+    <aside className="fixed inset-y-0 left-0 w-64 bg-gradient-to-b from-white via-white to-sand-50/80 backdrop-blur-xl border-r border-slate-200/60 shadow-[4px_0_24px_-2px_rgba(15,118,110,0.08)]">
+      {/* Decorative gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-secondary/[0.03] pointer-events-none" />
+
+      {/* Logo Section */}
+      <div className="relative px-6 py-6 border-b border-slate-100/80">
         <div className="flex items-center gap-3">
           <img
             src="/logo.png"
             alt="Portal Keterbukaan Informasi"
-            className="h-10 w-auto max-w-[340px] object-contain"
+            className="h-10 w-auto max-w-[340px] object-contain drop-shadow-sm"
           />
         </div>
+        {/* Subtle accent line */}
+        <div className="absolute bottom-0 left-6 right-6 h-[2px] bg-gradient-to-r from-primary/40 via-secondary/30 to-transparent rounded-full" />
       </div>
-      <nav className="px-3 space-y-1 overflow-y-auto max-h-[calc(100vh-120px)] pb-6">
-        {links.map((item) => (
+
+      {/* Navigation */}
+      <nav className="relative px-3 py-4 space-y-1 overflow-y-auto max-h-[calc(100vh-120px)] pb-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+        {links.map((item, index) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${isActive
-                ? 'bg-primary text-white shadow-soft'
-                : 'text-slate-700 hover:bg-slate-100'
+              `group relative flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${isActive
+                ? 'bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25 scale-[1.02]'
+                : 'text-slate-600 hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100/80 hover:text-slate-900 hover:shadow-sm'
               }`
             }
           >
-            <span className="text-slate-500">{renderIcon(item.icon)}</span>
-            <span className="text-sm flex-1">{item.label}</span>
-            {item.to === '/penugasan' && pendingQuota > 0 && location.pathname !== '/penugasan' && (
-              <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_0_6px_rgba(248,113,113,0.2)]" />
+            {({ isActive }) => (
+              <>
+                {/* Active indicator bar */}
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white/90 rounded-r-full shadow-sm" />
+                )}
+
+                {/* Icon with dynamic styling */}
+                <span className={`flex-shrink-0 transition-colors duration-200 ${isActive
+                    ? 'text-white/90'
+                    : 'text-slate-400 group-hover:text-primary'
+                  }`}>
+                  {renderIcon(item.icon)}
+                </span>
+
+                {/* Label */}
+                <span className="text-sm flex-1 truncate">{item.label}</span>
+
+                {/* Notification badge for pending quota */}
+                {item.to === '/penugasan' && pendingQuota > 0 && location.pathname !== '/penugasan' && (
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-lg" />
+                  </span>
+                )}
+
+                {/* Hover arrow indicator */}
+                {!isActive && (
+                  <svg
+                    className="w-4 h-4 text-slate-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </>
             )}
           </NavLink>
         ))}
       </nav>
+
+
     </aside>
   );
 };
