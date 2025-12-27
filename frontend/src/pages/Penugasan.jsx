@@ -135,24 +135,6 @@ const Penugasan = () => {
     }
   };
 
-  const filteredBadan = useMemo(() => {
-    const q = filter.toLowerCase();
-    return badan.filter(
-      (b) =>
-        b.nama_badan_publik?.toLowerCase().includes(q) ||
-        b.kategori?.toLowerCase().includes(q) ||
-        b.email?.toLowerCase().includes(q)
-    );
-  }, [badan, filter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredBadan.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const pagedBadan = useMemo(() => {
-    const safePage = Math.max(1, currentPage);
-    const start = (safePage - 1) * pageSize;
-    return filteredBadan.slice(start, start + pageSize);
-  }, [filteredBadan, currentPage]);
-
   const userNameMap = useMemo(() => {
     const map = {};
     users.forEach((u) => {
@@ -175,6 +157,26 @@ const Penugasan = () => {
     });
     return map;
   }, [allAssignments, userNameMap]);
+
+  const filteredBadan = useMemo(() => {
+    const q = filter.toLowerCase();
+    const assignedName = (id) => (assignmentsMap[id] || '').toLowerCase();
+    return badan.filter(
+      (b) =>
+        b.nama_badan_publik?.toLowerCase().includes(q) ||
+        b.kategori?.toLowerCase().includes(q) ||
+        b.email?.toLowerCase().includes(q) ||
+        assignedName(b.id).includes(q)
+    );
+  }, [badan, filter, assignmentsMap]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBadan.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedBadan = useMemo(() => {
+    const safePage = Math.max(1, currentPage);
+    const start = (safePage - 1) * pageSize;
+    return filteredBadan.slice(start, start + pageSize);
+  }, [filteredBadan, currentPage]);
   const unassignedCount = useMemo(
     () => badan.filter((b) => !assignmentsMap[b.id]).length,
     [assignmentsMap, badan]

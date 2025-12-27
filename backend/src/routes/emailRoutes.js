@@ -3,7 +3,8 @@ import {
   sendBulkEmail,
   getEmailLogs,
   streamEmailLogs,
-  retryEmail
+  retryEmail,
+  deleteEmailLogsBulk
 } from '../controllers/emailController.js';
 import { verifyToken } from '../middleware/verifyToken.js';
 
@@ -13,6 +14,7 @@ router.use(verifyToken);
 
 router.get('/logs', getEmailLogs);
 router.get('/stream', streamEmailLogs);
+router.post('/logs/bulk-delete', deleteEmailLogsBulk);
 router.post('/send', sendBulkEmail);
 router.post('/retry/:id', retryEmail);
 

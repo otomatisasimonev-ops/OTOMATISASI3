@@ -30,6 +30,7 @@ const AdminUjiAksesReports = () => {
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
@@ -73,6 +74,10 @@ const AdminUjiAksesReports = () => {
   useEffect(() => {
     if (isAdmin) fetchReports();
   }, [fetchReports, isAdmin]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [reports]);
 
   const loadQuestions = useCallback(async () => {
     setQuestionsLoading(true);
@@ -134,6 +139,38 @@ const AdminUjiAksesReports = () => {
     const option = (question.options || []).find((opt) => opt.key === answer.optionKey);
     if (!option) return '';
     return option.score ?? '';
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAll = () => {
+    const ids = sorted.map((r) => r.id);
+    if (ids.length === 0) {
+      setSelectedIds([]);
+      return;
+    }
+    const allSelected = ids.every((id) => selectedIds.includes(id));
+    setSelectedIds(allSelected ? [] : ids);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      setError('Pilih minimal satu laporan untuk dihapus.');
+      return;
+    }
+    if (!confirm(`Hapus ${selectedIds.length} laporan terpilih?`)) return;
+    setError('');
+    try {
+      const res = await api.post('/api/admin/reports/bulk-delete', { ids: selectedIds });
+      const selectedSet = new Set(selectedIds);
+      setReports((prev) => prev.filter((item) => !selectedSet.has(item.id)));
+      setSelectedIds([]);
+      setError(res.data?.message || '');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Gagal menghapus laporan terpilih.');
+    }
   };
 
   const exportCsv = async () => {
@@ -344,10 +381,30 @@ const AdminUjiAksesReports = () => {
         <div className="px-4 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-sm">{error}</div>
       )}
 
+      {selectedIds.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
+          <span>{selectedIds.length} laporan dipilih</span>
+          <button
+            onClick={handleBulkDelete}
+            className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
+          >
+            Hapus terpilih
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-3xl border border-slate-200 shadow-soft p-4 overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="bg-slate-50 text-slate-600">
+              <th className="px-4 py-3 text-left w-[42px]">
+                <input
+                  type="checkbox"
+                  aria-label="Pilih semua laporan"
+                  checked={sorted.length > 0 && sorted.every((r) => selectedIds.includes(r.id))}
+                  onChange={toggleSelectAll}
+                />
+              </th>
               <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">Tanggal</th>
               <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">Badan Publik</th>
               <th className="px-4 py-3 text-left text-[11px] uppercase tracking-[0.08em]">User</th>
@@ -359,19 +416,27 @@ const AdminUjiAksesReports = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                <td className="px-4 py-6 text-center text-slate-500" colSpan={7}>
                   Memuat...
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                <td className="px-4 py-6 text-center text-slate-500" colSpan={7}>
                   Tidak ada laporan.
                 </td>
               </tr>
             ) : (
               sorted.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Pilih laporan ${r.id}`}
+                      checked={selectedIds.includes(r.id)}
+                      onChange={() => toggleSelect(r.id)}
+                    />
+                  </td>
                   <td className="px-4 py-3">{formatDate(r.created_at || r.createdAt)}</td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{r.badanPublik?.nama_badan_publik || '-'}</td>
                   <td className="px-4 py-3">{r.user?.username || '-'}</td>

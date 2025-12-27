@@ -35,6 +35,71 @@ const assignmentImportFields = [
   { key: 'email_penguji', label: 'Email Penguji', aliases: ['email penguji', 'email penguji akses'] },
   { key: 'no_hp_penguji', label: 'No HP Penguji', aliases: ['no hp', 'nomor hp', 'nomer hp', 'hp', 'phone', 'telepon', 'telp'] }
 ];
+const assignmentRequiredKeys = assignmentImportFields
+  .filter((f) => f.key !== 'email' && f.key !== 'email_penguji')
+  .map((f) => f.key);
+
+const normalizeValue = (val) => String(val ?? '').trim();
+
+const normalizeEmail = (val) => {
+  const trimmed = normalizeValue(val).toLowerCase();
+  return trimmed || '';
+};
+
+const normalizePhone = (val) => {
+  const cleaned = normalizeValue(val).replace(/[^\d+]/g, '');
+  if (!cleaned) return '';
+  if (cleaned.startsWith('+62')) {
+    return `0${cleaned.slice(3)}`;
+  }
+  if (cleaned.startsWith('62')) {
+    return `0${cleaned.slice(2)}`;
+  }
+  if (cleaned.startsWith('0')) {
+    return cleaned;
+  }
+  return `0${cleaned}`;
+};
+
+const isValidEmail = (val) => {
+  if (!val) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+};
+
+const buildTemplateCsv = () => {
+  const header = assignmentImportFields.map((f) => f.label);
+  const sample = [
+    'Dinas Kominfo',
+    'Pemerintah',
+    'https://dinas.go.id',
+    'ppid@dinas.go.id',
+    'Pemda',
+    'Permohonan informasi publik',
+    'Budi Santoso',
+    'budi@contoh.id',
+    '08123456789'
+  ];
+  return [header, sample]
+    .map((cols) => cols.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+};
+
+const buildTemplateXlsx = () => {
+  const header = assignmentImportFields.reduce((acc, f) => {
+    acc[f.label] = '';
+    return acc;
+  }, {});
+  header['Nama Badan Publik'] = 'Dinas Kominfo';
+  header['Kategori'] = 'Pemerintah';
+  header['Website'] = 'https://dinas.go.id';
+  header['Email'] = 'ppid@dinas.go.id';
+  header['Lembaga'] = 'Pemda';
+  header['Pertanyaan'] = 'Permohonan informasi publik';
+  header['Nama Penguji Akses'] = 'Budi Santoso';
+  header['Email Penguji'] = 'budi@contoh.id';
+  header['No HP Penguji'] = '08123456789';
+  return [header];
+};
 
 const BadanPublik = () => {
   const { user } = useAuth();
@@ -46,6 +111,8 @@ const BadanPublik = () => {
   const [formData, setFormData] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
+  const [forceDeleteIds, setForceDeleteIds] = useState([]);
+  const [forceDeleting, setForceDeleting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState([]);
   const [importHeaders, setImportHeaders] = useState([]);
@@ -71,6 +138,10 @@ const BadanPublik = () => {
   });
   const [importAssignError, setImportAssignError] = useState('');
   const [importAssignLoading, setImportAssignLoading] = useState(false);
+  const [importAssignIssues, setImportAssignIssues] = useState([]);
+  const [importAssignSummary, setImportAssignSummary] = useState(null);
+  const [importAssignController, setImportAssignController] = useState(null);
+  const [importAssignSimulated, setImportAssignSimulated] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [emailFilter, setEmailFilter] = useState('all');
   const [holidays, setHolidays] = useState([]);
@@ -161,6 +232,22 @@ const BadanPublik = () => {
     }
   };
 
+  const applyLocalDelete = (ids) => {
+    const idSet = new Set(ids);
+    setData((prev) => prev.filter((item) => !idSet.has(item.id)));
+    setSelectedIds((prev) => prev.filter((selectedId) => !idSet.has(selectedId)));
+    setMonitoringMap((prev) => {
+      const next = { ...prev };
+      ids.forEach((removeId) => {
+        if (next[removeId]) {
+          delete next[removeId];
+        }
+      });
+      saveMonitoringMap(next);
+      return next;
+    });
+  };
+
   const deleteData = async (id) => {
     if (!isAdmin) {
       setStatusMessage('Akses ditolak: hanya admin yang bisa menghapus data.');
@@ -170,9 +257,14 @@ const BadanPublik = () => {
     try {
       await api.delete(`/badan-publik/${id}`);
       setStatusMessage('Data dihapus.');
-      fetchData();
+      setForceDeleteIds([]);
+      applyLocalDelete([id]);
     } catch (err) {
-      setStatusMessage(err.response?.data?.message || 'Gagal menghapus data');
+      const msg = err.response?.data?.message || 'Gagal menghapus data';
+      setStatusMessage(msg);
+      if (err.response?.status === 409) {
+        setForceDeleteIds([id]);
+      }
     }
   };
 
@@ -201,10 +293,42 @@ const BadanPublik = () => {
     try {
       const res = await api.post('/badan-publik/bulk-delete', { ids: selectedIds });
       setStatusMessage(res.data?.message || `Berhasil menghapus ${selectedIds.length} data.`);
+      setForceDeleteIds([]);
+      applyLocalDelete(selectedIds);
       setSelectedIds([]);
-      fetchData();
     } catch (err) {
-      setStatusMessage(err.response?.data?.message || 'Gagal menghapus data terpilih');
+      const msg = err.response?.data?.message || 'Gagal menghapus data terpilih';
+      setStatusMessage(msg);
+      if (err.response?.status === 409) {
+        setForceDeleteIds(selectedIds);
+      }
+    }
+  };
+
+  const handleForceDelete = async () => {
+    if (forceDeleteIds.length === 0) return;
+    if (
+      !confirm(
+        `Force delete akan menghapus badan publik beserta data terhubung (riwayat penugasan/log/laporan). Lanjutkan?`
+      )
+    ) {
+      return;
+    }
+    setForceDeleting(true);
+    setStatusMessage('');
+    try {
+      const res = await api.post('/badan-publik/bulk-delete', {
+        ids: forceDeleteIds,
+        force: true
+      });
+      setStatusMessage(res.data?.message || 'Force delete berhasil.');
+      applyLocalDelete(forceDeleteIds);
+      setForceDeleteIds([]);
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Force delete gagal.';
+      setStatusMessage(msg);
+    } finally {
+      setForceDeleting(false);
     }
   };
 
@@ -223,7 +347,7 @@ const BadanPublik = () => {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
       if (!rows.length) {
         setImportError('File kosong.');
         return;
@@ -291,7 +415,11 @@ const BadanPublik = () => {
       };
       assignmentImportFields.forEach((f) => {
         const selectedHeader = mapping[f.key];
-        obj[f.key] = String(rowMap[selectedHeader] ?? '').trim();
+        const value = normalizeValue(rowMap[selectedHeader]);
+        if (f.key === 'email') obj[f.key] = normalizeEmail(value);
+        else if (f.key === 'email_penguji') obj[f.key] = normalizeEmail(value);
+        else if (f.key === 'no_hp_penguji') obj[f.key] = normalizePhone(value);
+        else obj[f.key] = value;
       });
       return obj;
     });
@@ -300,6 +428,102 @@ const BadanPublik = () => {
     if (!importAssignRows.length) return;
     const previewObjs = buildAssignPreview(importAssignRows, importAssignHeaders, importAssignMapping);
     setImportAssignPreview(previewObjs.slice(0, 5));
+  }, [importAssignRows, importAssignHeaders, importAssignMapping]);
+
+  const computeAssignDiagnostics = (rows, header, mapping) => {
+    if (!rows.length) {
+      return { preview: [], issues: [], summary: null };
+    }
+
+    const mapped = buildAssignPreview(rows, header, mapping);
+    const issues = [];
+    const emailSeen = new Map();
+    let missingRequired = 0;
+    let invalidEmail = 0;
+    let missingAssignee = 0;
+    let duplicateEmail = 0;
+    let duplicateName = 0;
+    const duplicateNameRows = [];
+    const missingByField = {};
+    const existingNameSet = new Set(
+      data.map((item) => normalizeValue(item.nama_badan_publik).toLowerCase()).filter(Boolean)
+    );
+
+    mapped.forEach((row, idx) => {
+      const rowIndex = idx + 2; // header + 1
+      const missingFields = assignmentRequiredKeys.filter((key) => !row[key]);
+      if (missingFields.length) {
+        missingRequired++;
+        missingFields.forEach((key) => {
+          missingByField[key] = (missingByField[key] || 0) + 1;
+        });
+        const labels = missingFields
+          .map((key) => assignmentImportFields.find((f) => f.key === key)?.label || key)
+          .join(', ');
+        issues.push({ rowIndex, type: 'required', message: `Data belum lengkap (kolom: ${labels}).` });
+      }
+
+      if (row.email && !isValidEmail(row.email)) {
+        invalidEmail++;
+        issues.push({ rowIndex, type: 'email', message: 'Email badan publik tidak valid.' });
+      }
+
+      const hasAssignee = row.nama_penguji && row.no_hp_penguji;
+      if (!hasAssignee) {
+        missingAssignee++;
+        issues.push({ rowIndex, type: 'assignee', message: 'Penguji belum lengkap (nama + no hp).' });
+      }
+
+      if (row.email) {
+        const key = row.email.toLowerCase();
+        if (emailSeen.has(key)) {
+          duplicateEmail++;
+          issues.push({ rowIndex, type: 'duplicate', message: `Duplikat email badan publik (baris ${emailSeen.get(key)}).` });
+        } else {
+          emailSeen.set(key, rowIndex);
+        }
+      }
+
+      if (row.nama_badan_publik) {
+        const key = row.nama_badan_publik.toLowerCase();
+        if (existingNameSet.has(key)) {
+          duplicateName++;
+          if (duplicateNameRows.length < 3) {
+            duplicateNameRows.push(rowIndex);
+          }
+        }
+      }
+    });
+
+    const summary = {
+      total: mapped.length,
+      missingRequired,
+      invalidEmail,
+      missingAssignee,
+      duplicateEmail,
+      duplicateName,
+      duplicateNameRows,
+      missingByField,
+      valid: mapped.length - missingRequired
+    };
+
+    return { preview: mapped, issues, summary };
+  };
+
+  useEffect(() => {
+    if (!importAssignRows.length) {
+      setImportAssignIssues([]);
+      setImportAssignSummary(null);
+      return;
+    }
+    const { preview, issues, summary } = computeAssignDiagnostics(
+      importAssignRows,
+      importAssignHeaders,
+      importAssignMapping
+    );
+    setImportAssignPreview(preview.slice(0, 5));
+    setImportAssignIssues(issues);
+    setImportAssignSummary(summary);
   }, [importAssignRows, importAssignHeaders, importAssignMapping]);
 
   const submitImport = async () => {
@@ -359,7 +583,7 @@ const BadanPublik = () => {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
       if (!rows.length) {
         setImportAssignError('File kosong.');
         return;
@@ -400,9 +624,32 @@ const BadanPublik = () => {
       return;
     }
 
+    const { summary } = computeAssignDiagnostics(importAssignRows, importAssignHeaders, importAssignMapping);
+    if (summary?.missingRequired) {
+      const missingLabels = Object.keys(summary.missingByField || {})
+        .map((key) => assignmentImportFields.find((f) => f.key === key)?.label || key)
+        .join(', ');
+      setImportAssignError(`Data belum lengkap (kolom: ${missingLabels}).`);
+      return;
+    }
+    if (summary?.duplicateName) {
+      const samples = (summary.duplicateNameRows || []).join(', ');
+      setImportAssignError(
+        `Nama badan publik sudah ada di database (${summary.duplicateName} baris). Contoh baris: ${samples || '-'}`
+      );
+      return;
+    }
+    const proceed = confirm(
+      `Konfirmasi import:\nTotal baris: ${summary?.total || 0}\nValid: ${summary?.valid || 0}\nTanpa penguji lengkap: ${summary?.missingAssignee || 0}\nDuplikat email: ${summary?.duplicateEmail || 0}\nNama badan publik sudah ada di database: ${summary?.duplicateName || 0}`
+    );
+    if (!proceed) return;
+
     const mapped = buildAssignPreview(importAssignRows, importAssignHeaders, importAssignMapping);
     try {
       setImportAssignLoading(true);
+      setImportAssignSimulated('');
+      const controller = new AbortController();
+      setImportAssignController(controller);
       const payloadRecords = mapped.map((r) => ({
         nama_badan_publik: r.nama_badan_publik,
         kategori: r.kategori,
@@ -414,22 +661,45 @@ const BadanPublik = () => {
         email_penguji: r.email_penguji,
         no_hp_penguji: r.no_hp_penguji
       }));
-      const res = await api.post('/badan-publik/import-assign', { records: payloadRecords });
+      const res = await api.post('/badan-publik/import-assign', { records: payloadRecords }, { signal: controller.signal });
       setImportAssignError('');
       setImportAssignOpen(false);
-      setStatusMessage(res.data?.message || `Import berhasil (${payloadRecords.length} data).`);
+      const stats = res.data?.stats;
+      const detail = stats
+        ? `Dibuat ${stats.created}, user ${stats.createdUsers}, penugasan ${stats.assigned}, duplikat ${stats.skippedExisting}.`
+        : '';
+      setStatusMessage(res.data?.message || `Import berhasil (${payloadRecords.length} data). ${detail}`.trim());
       setImportAssignHeaders([]);
       setImportAssignRows([]);
       setImportAssignPreview([]);
+      setImportAssignIssues([]);
+      setImportAssignSummary(null);
       const resetMap = {};
       assignmentImportFields.forEach((f) => (resetMap[f.key] = ''));
       setImportAssignMapping(resetMap);
       fetchData();
     } catch (err) {
-      setImportAssignError(err.response?.data?.message || 'Gagal import + penugasan');
+      if (err?.name === 'CanceledError') {
+        setImportAssignError('Proses import dibatalkan.');
+      } else {
+        setImportAssignError(err.response?.data?.message || 'Gagal import + penugasan');
+      }
     } finally {
       setImportAssignLoading(false);
+      setImportAssignController(null);
     }
+  };
+
+  const simulateImportAssign = () => {
+    if (!importAssignRows.length) {
+      setImportAssignError('Tidak ada data untuk disimulasikan.');
+      return;
+    }
+    const { summary } = computeAssignDiagnostics(importAssignRows, importAssignHeaders, importAssignMapping);
+    setImportAssignError('');
+    setImportAssignSimulated(
+      `Simulasi selesai. Total ${summary?.total || 0}, valid ${summary?.valid || 0}, tanpa penguji ${summary?.missingAssignee || 0}, duplikat email ${summary?.duplicateEmail || 0}.`
+    );
   };
 
   const updateMonitoring = (id, updates) => {
@@ -480,7 +750,18 @@ const BadanPublik = () => {
       </div>
 
       {statusMessage && (
-        <div className="p-3 rounded-xl bg-white border border-slate-200 text-sm text-slate-700">{statusMessage}</div>
+        <div className="p-3 rounded-xl bg-white border border-slate-200 text-sm text-slate-700 flex items-center justify-between gap-3 flex-wrap">
+          <span>{statusMessage}</span>
+          {forceDeleteIds.length > 0 && (
+            <button
+              onClick={handleForceDelete}
+              disabled={forceDeleting}
+              className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 disabled:opacity-60"
+            >
+              {forceDeleting ? 'Memproses...' : 'Force delete'}
+            </button>
+          )}
+        </div>
       )}
 
       {isAdmin && selectedIds.length > 0 && (
@@ -985,9 +1266,44 @@ const BadanPublik = () => {
                   onChange={handleImportAssignFile}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3"
                 />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const csv = buildTemplateCsv();
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const link = document.createElement('a');
+                      link.href = URL.createObjectURL(blob);
+                      link.download = 'template-import-penugasan.csv';
+                      link.click();
+                      URL.revokeObjectURL(link.href);
+                    }}
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs hover:bg-slate-50"
+                  >
+                    Download Template CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rows = buildTemplateXlsx();
+                      const ws = XLSX.utils.json_to_sheet(rows);
+                      const wb = XLSX.utils.book_new();
+                      XLSX.utils.book_append_sheet(wb, ws, 'Template');
+                      XLSX.writeFile(wb, 'template-import-penugasan.xlsx');
+                    }}
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs hover:bg-slate-50"
+                  >
+                    Download Template Excel
+                  </button>
+                </div>
                 {importAssignError && (
                   <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
                     {importAssignError}
+                  </div>
+                )}
+                {importAssignSimulated && (
+                  <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                    {importAssignSimulated}
                   </div>
                 )}
               </div>
@@ -1006,6 +1322,11 @@ const BadanPublik = () => {
               {importAssignHeaders.length > 0 ? (
                 <div className="border border-slate-200 rounded-xl p-3 bg-white">
                   <div className="text-sm font-semibold text-slate-800 mb-2">Pilih kolom sesuai field</div>
+                  {['nama_badan_publik', 'kategori'].some((key) => !importAssignMapping[key]) && (
+                    <div className="text-xs text-rose-600 mb-2">
+                      Field wajib belum lengkap: Nama Badan Publik dan Kategori harus dipilih.
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {assignmentImportFields.map((f) => (
                       <div key={f.key} className="space-y-1">
@@ -1035,6 +1356,36 @@ const BadanPublik = () => {
               ) : (
                 <div className="border border-dashed border-slate-300 rounded-xl p-3 text-sm text-slate-600 bg-slate-50">
                   Upload file terlebih dahulu untuk memilih mapping kolom.
+                </div>
+              )}
+
+              {importAssignSummary && (
+                <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 text-xs text-amber-700 space-y-1">
+                  <div className="font-semibold text-amber-800">Ringkasan validasi</div>
+                  <div>Total baris: {importAssignSummary.total}</div>
+                  <div>Valid (nama & kategori lengkap): {importAssignSummary.valid}</div>
+                  <div>Baris belum lengkap (kecuali email badan publik & email penguji): {importAssignSummary.missingRequired}</div>
+                  <div>Duplikat email badan publik: {importAssignSummary.duplicateEmail}</div>
+                  <div>Nama badan publik sudah ada di database: {importAssignSummary.duplicateName}</div>
+                  <div>Email badan publik tidak valid: {importAssignSummary.invalidEmail}</div>
+                  <div>Penguji tidak lengkap (nama + no hp): {importAssignSummary.missingAssignee}</div>
+                </div>
+              )}
+
+              {importAssignIssues.length > 0 && (
+                <div className="border border-rose-200 bg-rose-50 rounded-xl p-3 text-xs text-rose-700 space-y-1">
+                  <div className="font-semibold text-rose-800">Contoh issue (maks 8 baris)</div>
+                  {importAssignIssues.slice(0, 8).map((issue, idx) => (
+                    <div key={`${issue.rowIndex}-${idx}`}>
+                      Baris {issue.rowIndex}: {issue.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {importAssignSummary?.duplicateName > 0 && (
+                <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 text-xs text-amber-700">
+                  Nama badan publik sudah ada di database ({importAssignSummary.duplicateName} baris). Contoh baris:{' '}
+                  {(importAssignSummary.duplicateNameRows || []).join(', ') || '-'}
                 </div>
               )}
 
@@ -1083,10 +1434,23 @@ const BadanPublik = () => {
 
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setImportAssignOpen(false)}
+                onClick={() => {
+                  if (importAssignLoading && importAssignController) {
+                    importAssignController.abort();
+                    return;
+                  }
+                  setImportAssignOpen(false);
+                }}
                 className="px-4 py-3 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"
               >
-                Batal
+                {importAssignLoading ? 'Batalkan proses' : 'Batal'}
+              </button>
+              <button
+                onClick={simulateImportAssign}
+                className="px-4 py-3 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"
+                disabled={importAssignLoading}
+              >
+                Simulasi
               </button>
               <button
                 onClick={submitImportAssign}

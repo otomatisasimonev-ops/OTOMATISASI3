@@ -18,6 +18,7 @@ const HistoryLog = () => {
   const [infoMessage, setInfoMessage] = useState('');
   const [streamStatus, setStreamStatus] = useState('idle');
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
   const [retryingId, setRetryingId] = useState(null);
   const [holidays, setHolidays] = useState([]);
   const eventSourceRef = useRef(null);
@@ -57,6 +58,7 @@ const HistoryLog = () => {
         (a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime()
       );
       setLogs(sorted);
+      setSelectedIds([]);
     } catch (err) {
       console.error(err);
       setInfoMessage(err.response?.data?.message || 'Gagal memuat log');
@@ -174,6 +176,20 @@ const HistoryLog = () => {
         l.message_id?.toLowerCase().includes(q)
     );
   }, [logs, ownerFilter, statusFilter, categoryFilter, user?.id, search]);
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAll = () => {
+    const ids = filteredLogs.map((l) => l.id);
+    if (ids.length === 0) {
+      setSelectedIds([]);
+      return;
+    }
+    const allSelected = ids.every((id) => selectedIds.includes(id));
+    setSelectedIds(allSelected ? [] : ids);
+  };
 
   const openGmail = (messageId) => {
     const url = messageId
@@ -325,6 +341,24 @@ const HistoryLog = () => {
       setInfoMessage(err.response?.data?.message || 'Gagal retry');
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      setInfoMessage('Pilih minimal satu log untuk dihapus.');
+      return;
+    }
+    if (!confirm(`Hapus ${selectedIds.length} log terpilih?`)) return;
+    setInfoMessage('');
+    try {
+      const res = await api.post('/email/logs/bulk-delete', { ids: selectedIds });
+      setInfoMessage(res.data?.message || 'Log terhapus.');
+      const selectedSet = new Set(selectedIds);
+      setLogs((prev) => prev.filter((item) => !selectedSet.has(item.id)));
+      setSelectedIds([]);
+    } catch (err) {
+      setInfoMessage(err.response?.data?.message || 'Gagal menghapus log terpilih.');
     }
   };
 
@@ -486,10 +520,30 @@ const HistoryLog = () => {
           </div>
         </div>
 
+        {selectedIds.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
+            <span>{selectedIds.length} log dipilih</span>
+            <button
+              onClick={handleBulkDelete}
+              className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
+            >
+              Hapus terpilih
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
+                <th className="px-4 py-3 text-left w-[42px]">
+                  <input
+                    type="checkbox"
+                    aria-label="Pilih semua log"
+                    checked={filteredLogs.length > 0 && filteredLogs.every((l) => selectedIds.includes(l.id))}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <th className="px-4 py-3 text-left">Pengirim</th>
                 <th className="px-4 py-3 text-left">Target</th>
                 <th className="px-4 py-3 text-left">Tenggat</th>
@@ -518,6 +572,14 @@ const HistoryLog = () => {
                     key={item.id}
                     className="border-t border-slate-100 hover:bg-slate-50"
                   >
+                    <td className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`Pilih log ${item.id}`}
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                      />
+                    </td>
                     <td className="px-4 py-2 font-semibold text-slate-900">
                       <button
                         type="button"

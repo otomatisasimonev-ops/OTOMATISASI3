@@ -111,7 +111,12 @@ const AddUser = () => {
       const res = await api.delete(`/users/${confirmUser.id}`);
       setMessage(res.data?.message || 'User dihapus');
       setMessageType('success');
-      await loadUsers();
+      setUsers((prev) => prev.filter((u) => u.id !== confirmUser.id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(confirmUser.id);
+        return next;
+      });
       setConfirmUser(null);
     } catch (err) {
       setMessage(err.response?.data?.message || 'Gagal menghapus user');
@@ -173,8 +178,9 @@ const AddUser = () => {
       const res = await api.post('/users/bulk-delete', { ids: Array.from(selectedIds) });
       setMessage(res.data?.message || `Berhasil menghapus ${selectedIds.size} user.`);
       setMessageType('success');
+      const selectedSet = new Set(selectedIds);
+      setUsers((prev) => prev.filter((u) => !selectedSet.has(u.id)));
       setSelectedIds(new Set());
-      await loadUsers();
     } catch (err) {
       setMessage(err.response?.data?.message || 'Gagal menghapus user terpilih');
       setMessageType('error');

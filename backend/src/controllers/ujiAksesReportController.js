@@ -359,6 +359,36 @@ const ensureReportUploadDir = (reportId, questionKey) => {
   return dir;
 };
 
+const adminDeleteReportsBulk = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ message: "IDs wajib diisi" });
+    }
+
+    const uniqueIds = [
+      ...new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))),
+    ];
+
+    if (!uniqueIds.length) {
+      return res.status(400).json({ message: "IDs tidak valid" });
+    }
+
+    const deleted = await UjiAksesReport.destroy({
+      where: { id: uniqueIds },
+    });
+
+    return res.json({
+      message: `Berhasil menghapus ${deleted} laporan.`,
+      deleted,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Gagal menghapus laporan terpilih" });
+  }
+};
+
 export {
   createReport,
   listMyReports,
@@ -368,4 +398,5 @@ export {
   uploadEvidence,
   ensureReportUploadDir,
   getMulterStoragePath,
+  adminDeleteReportsBulk,
 };

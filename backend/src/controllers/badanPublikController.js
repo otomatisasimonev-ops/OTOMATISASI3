@@ -1,6 +1,6 @@
 import { Op } from "sequelize";
 import bcrypt from "bcrypt";
-import { BadanPublik, Assignment, User } from "../models/index.js";
+import { db, BadanPublik, Assignment, EmailLog, UjiAksesReport, User } from "../models/index.js";
 
 // Helper functions
 const isValidEmail = (email) => {
@@ -222,10 +222,35 @@ const deleteBadanPublik = async (req, res) => {
       return res.status(404).json({ message: "Data tidak ditemukan" });
     }
 
+    const force = String(req.query?.force || "").toLowerCase() === "true";
+    if (force) {
+      await db.transaction(async (transaction) => {
+        await EmailLog.destroy({ where: { badan_publik_id: data.id }, transaction });
+        await Assignment.destroy({ where: { badan_publik_id: data.id }, transaction });
+        await UjiAksesReport.destroy({ where: { badan_publik_id: data.id }, transaction });
+        try {
+          await db.query(
+            "DELETE FROM AssignmentHistories WHERE badan_publik_id IN (:ids)",
+            { replacements: { ids: [data.id] }, transaction }
+          );
+        } catch (err) {
+          console.error("Gagal hapus AssignmentHistories", err?.message || err);
+        }
+        await data.destroy({ transaction });
+      });
+      return res.json({ message: "Data berhasil dihapus (force delete)." });
+    }
+
     await data.destroy();
     return res.json({ message: "Data berhasil dihapus" });
   } catch (err) {
     console.error(err);
+    if (err?.name === "SequelizeForeignKeyConstraintError") {
+      return res.status(409).json({
+        message:
+          "Gagal menghapus: badan publik ini masih punya data yang terhubung (riwayat penugasan atau log). Hapus data terkait dulu, lalu coba lagi.",
+      });
+    }
     return res
       .status(500)
       .json({ message: "Gagal menghapus data badan publik" });
@@ -234,7 +259,7 @@ const deleteBadanPublik = async (req, res) => {
 
 const deleteBadanPublikBulk = async (req, res) => {
   try {
-    const { ids } = req.body;
+    const { ids, force } = req.body;
 
     if (!Array.isArray(ids) || !ids.length) {
       return res.status(400).json({ message: "IDs wajib diisi" });
@@ -250,6 +275,28 @@ const deleteBadanPublikBulk = async (req, res) => {
       return res.status(400).json({ message: "IDs tidak valid" });
     }
 
+    if (force) {
+      await db.transaction(async (transaction) => {
+        await EmailLog.destroy({ where: { badan_publik_id: uniqueIds }, transaction });
+        await Assignment.destroy({ where: { badan_publik_id: uniqueIds }, transaction });
+        await UjiAksesReport.destroy({ where: { badan_publik_id: uniqueIds }, transaction });
+        try {
+          await db.query(
+            "DELETE FROM AssignmentHistories WHERE badan_publik_id IN (:ids)",
+            { replacements: { ids: uniqueIds }, transaction }
+          );
+        } catch (err) {
+          console.error("Gagal hapus AssignmentHistories", err?.message || err);
+        }
+        await BadanPublik.destroy({ where: { id: uniqueIds }, transaction });
+      });
+
+      return res.json({
+        message: `Berhasil menghapus ${uniqueIds.length} data (force delete).`,
+        deleted: uniqueIds.length,
+      });
+    }
+
     const deleted = await BadanPublik.destroy({
       where: { id: uniqueIds },
     });
@@ -260,6 +307,12 @@ const deleteBadanPublikBulk = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    if (err?.name === "SequelizeForeignKeyConstraintError") {
+      return res.status(409).json({
+        message:
+          "Gagal menghapus: badan publik ini masih punya data yang terhubung (riwayat penugasan atau log). Hapus data terkait dulu, lalu coba lagi.",
+      });
+    }
     return res.status(500).json({ message: "Gagal menghapus data terpilih" });
   }
 };

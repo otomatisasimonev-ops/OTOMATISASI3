@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { Op } from "sequelize";
 import {
   BadanPublik,
   EmailLog,
@@ -489,6 +490,39 @@ const streamEmailLogs = async (req, res) => {
   res.on("error", cleanup);
 };
 
+// Menghapus log email (bulk)
+const deleteEmailLogsBulk = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ message: "IDs wajib diisi" });
+    }
+
+    const uniqueIds = [
+      ...new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))),
+    ];
+
+    if (!uniqueIds.length) {
+      return res.status(400).json({ message: "IDs tidak valid" });
+    }
+
+    const where = req.user.role === "admin"
+      ? { id: { [Op.in]: uniqueIds } }
+      : { id: { [Op.in]: uniqueIds }, user_id: req.user.id };
+
+    const deleted = await EmailLog.destroy({ where });
+
+    return res.json({
+      message: `Berhasil menghapus ${deleted} log.`,
+      deleted,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Gagal menghapus log terpilih" });
+  }
+};
+
 // Mengulang pengiriman email
 const retryEmail = async (req, res) => {
   try {
@@ -560,4 +594,4 @@ const retryEmail = async (req, res) => {
   }
 };
 
-export { sendBulkEmail, getEmailLogs, streamEmailLogs, retryEmail };
+export { sendBulkEmail, getEmailLogs, streamEmailLogs, deleteEmailLogsBulk, retryEmail };
