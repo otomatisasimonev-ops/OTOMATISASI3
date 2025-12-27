@@ -186,11 +186,11 @@ const HistoryLog = () => {
     const rows = filteredLogs.map((item) => [
       item.user?.username || '-',
       item.badanPublik?.nama_badan_publik || '-',
+      item.badanPublik?.email || '-',
       item.status,
-      formatDate(item.sent_at),
-      item.message_id || ''
+      formatDate(item.sent_at)
     ]);
-    const header = ['Pengirim', 'Target', 'Status', 'Waktu', 'MessageID'];
+    const header = ['Pengirim', 'Target', 'Email Target', 'Status', 'Waktu'];
     const toCsv = [header, ...rows]
       .map((cols) =>
         cols
@@ -214,9 +214,9 @@ const HistoryLog = () => {
     const rows = filteredLogs.map((item) => ({
       Pengirim: item.user?.username || '-',
       Target: item.badanPublik?.nama_badan_publik || '-',
+      'Email Target': item.badanPublik?.email || '-',
       Status: item.status,
-      Waktu: formatDate(item.sent_at),
-      MessageID: item.message_id || ''
+      Waktu: formatDate(item.sent_at)
     }));
     const ws = utils.json_to_sheet(rows);
     const wb = utils.book_new();
@@ -234,8 +234,8 @@ const HistoryLog = () => {
     filteredLogs.forEach((item, idx) => {
       const lines = [
         `${idx + 1}. ${item.user?.username || '-'} -> ${item.badanPublik?.nama_badan_publik || '-'}`,
+        `Email Target: ${item.badanPublik?.email || '-'}`,
         `Status: ${item.status} - ${formatDate(item.sent_at)}`,
-        `MessageID: ${item.message_id || '-'}`
       ];
       lines.forEach((line) => {
         const wrapped = doc.splitTextToSize(line, 180);

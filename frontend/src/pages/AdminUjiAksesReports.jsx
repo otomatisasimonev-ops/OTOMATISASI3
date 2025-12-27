@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { adminListUjiAksesReports } from '../services/reports';
+import { adminListUjiAksesReports, getUjiAksesQuestions } from '../services/reports';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -26,6 +26,7 @@ const AdminUjiAksesReports = () => {
 
   const [badanPublik, setBadanPublik] = useState([]);
   const [reports, setReports] = useState([]);
+  const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -72,8 +73,27 @@ const AdminUjiAksesReports = () => {
     if (isAdmin) fetchReports();
   }, [fetchReports, isAdmin]);
 
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        const data = await getUjiAksesQuestions();
+        setQuestions(data || []);
+      } catch (_err) {
+        setQuestions([]);
+      }
+    };
+    if (isAdmin) loadQuestions();
+  }, [isAdmin]);
+
   const sorted = useMemo(() => (reports || []).slice(), [reports]);
   const totalReports = sorted.length;
+  const questionColumns = useMemo(() => {
+    return (questions || []).map((q, idx) => ({
+      key: q.key,
+      label: `Q${idx + 1}: ${q.text}`,
+      options: q.options || []
+    }));
+  }, [questions]);
   const duplicateSummary = useMemo(() => {
     const map = new Map();
     sorted.forEach((r) => {
@@ -94,12 +114,118 @@ const AdminUjiAksesReports = () => {
     );
   }
 
+  const getQuestionScore = (question, answers) => {
+    const answer = answers?.[question.key];
+    if (!answer) return '';
+    const option = (question.options || []).find((opt) => opt.key === answer.optionKey);
+    if (!option) return '';
+    return option.score ?? '';
+  };
+
+  const exportCsv = () => {
+    const rows = sorted.map((item) => [
+      formatDate(item.created_at || item.createdAt),
+      item.badanPublik?.nama_badan_publik || '-',
+      item.user?.username || '-',
+      item.total_skor ?? 0,
+      ...questionColumns.map((q) => getQuestionScore(q, item.answers))
+    ]);
+    const header = ['Tanggal', 'Badan Publik', 'User', 'Total Skor', ...questionColumns.map((q) => q.label)];
+    const toCsv = [header, ...rows]
+      .map((cols) =>
+        cols
+          .map((val) => {
+            const safe = (val || '').toString().replace(/"/g, '""');
+            return `"${safe}"`;
+          })
+          .join(',')
+      )
+      .join('\n');
+    const blob = new Blob([toCsv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'admin-uji-akses-reports.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const exportXlsx = async () => {
+    const { utils, writeFile } = await import('xlsx');
+    const rows = sorted.map((item) => ({
+      Tanggal: formatDate(item.created_at || item.createdAt),
+      'Badan Publik': item.badanPublik?.nama_badan_publik || '-',
+      User: item.user?.username || '-',
+      'Total Skor': item.total_skor ?? 0,
+      ...questionColumns.reduce((acc, q) => {
+        acc[q.label] = getQuestionScore(q, item.answers);
+        return acc;
+      }, {})
+    }));
+    const ws = utils.json_to_sheet(rows);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, 'Laporan');
+    writeFile(wb, 'admin-uji-akses-reports.xlsx');
+  };
+
+  const exportPdf = async () => {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text('Laporan Uji Akses (Admin)', 14, 16);
+    doc.setFontSize(10);
+    let y = 26;
+    sorted.forEach((item, idx) => {
+      const lines = [
+        `${idx + 1}. ${item.badanPublik?.nama_badan_publik || '-'}`,
+        `User: ${item.user?.username || '-'}`,
+        `Tanggal: ${formatDate(item.created_at || item.createdAt)}`,
+        `Total Skor: ${item.total_skor ?? 0}`
+      ];
+      questionColumns.forEach((q) => {
+        lines.push(`${q.label}: ${getQuestionScore(q, item.answers)}`);
+      });
+      lines.forEach((line) => {
+        const wrapped = doc.splitTextToSize(line, 180);
+        wrapped.forEach((chunk) => {
+          if (y > 280) {
+            doc.addPage();
+            y = 16;
+          }
+          doc.text(chunk, 14, y);
+          y += 6;
+        });
+      });
+      y += 2;
+    });
+    doc.save('admin-uji-akses-reports.pdf');
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Admin - Laporan Uji Akses</h1>
           <p className="text-sm text-slate-600">Filter, sort, dan lihat detail laporan.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={exportCsv}
+            className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+          >
+            Export CSV
+          </button>
+          <button
+            onClick={exportXlsx}
+            className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+          >
+            Export Excel
+          </button>
+          <button
+            onClick={exportPdf}
+            className="px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-sm"
+          >
+            Export PDF
+          </button>
         </div>
       </div>
 
