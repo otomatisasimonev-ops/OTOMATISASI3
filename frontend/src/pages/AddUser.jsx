@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
+import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const importFields = [
   { key: 'username', label: 'Username', aliases: ['username', 'user', 'akun'] },
@@ -20,8 +22,17 @@ const AddUser = () => {
     nomer_hp: '',
     email: ''
   });
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('info');
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Konfirmasi',
+    cancelLabel: 'Batal',
+    tone: 'default',
+    loading: false,
+    onConfirm: null
+  });
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -64,7 +75,7 @@ const AddUser = () => {
       const res = await api.get('/users');
       setUsers(res.data || []);
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Gagal mengambil daftar user');
+      showToast(err.response?.data?.message || 'Gagal mengambil daftar user', 'error');
     } finally {
       setLoadingUsers(false);
     }
@@ -77,11 +88,55 @@ const AddUser = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message, type = 'info') => {
+    if (!message) return;
+    setToast({ message, type });
+  };
+
+  const openConfirm = (config) => {
+    setConfirmDialog({
+      open: true,
+      title: config.title || 'Konfirmasi',
+      message: config.message || '',
+      confirmLabel: config.confirmLabel || 'Konfirmasi',
+      cancelLabel: config.cancelLabel || 'Batal',
+      tone: config.tone || 'default',
+      loading: false,
+      onConfirm: config.onConfirm || null
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmDialog((prev) => ({
+      ...prev,
+      open: false,
+      loading: false,
+      onConfirm: null
+    }));
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmDialog.onConfirm) {
+      closeConfirm();
+      return;
+    }
+    setConfirmDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      await confirmDialog.onConfirm();
+    } finally {
+      closeConfirm();
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setMessage('');
-    setMessageType('info');
     try {
       const res = await api.post('/users', {
         username: form.username,
@@ -90,13 +145,11 @@ const AddUser = () => {
         nomer_hp: form.nomer_hp,
         email: form.email
       });
-      setMessage(res.data?.message || 'User berhasil dibuat');
-      setMessageType('success');
+      showToast(res.data?.message || 'User berhasil dibuat', 'success');
       setForm({ username: '', password: '', group: '', nomer_hp: '', email: '' });
       await loadUsers();
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Gagal membuat user');
-      setMessageType('error');
+      showToast(err.response?.data?.message || 'Gagal membuat user', 'error');
     } finally {
       setLoading(false);
     }
@@ -105,12 +158,9 @@ const AddUser = () => {
   const handleDelete = async () => {
     if (!confirmUser) return;
     setDeletingId(confirmUser.id);
-    setMessage('');
-    setMessageType('info');
     try {
       const res = await api.delete(`/users/${confirmUser.id}`);
-      setMessage(res.data?.message || 'User dihapus');
-      setMessageType('success');
+      showToast(res.data?.message || 'User dihapus', 'success');
       setUsers((prev) => prev.filter((u) => u.id !== confirmUser.id));
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -119,8 +169,7 @@ const AddUser = () => {
       });
       setConfirmUser(null);
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Gagal menghapus user');
-      setMessageType('error');
+      showToast(err.response?.data?.message || 'Gagal menghapus user', 'error');
     } finally {
       setDeletingId(null);
     }
@@ -129,21 +178,17 @@ const AddUser = () => {
   const handleResetPassword = async () => {
     if (!resetUser) return;
     if (!resetPassword.trim()) {
-      setMessage('Password baru wajib diisi');
+      showToast('Password baru wajib diisi', 'error');
       return;
     }
     setResetLoading(true);
-    setMessage('');
-    setMessageType('info');
     try {
       const res = await api.patch(`/users/${resetUser.id}/password`, { password: resetPassword });
-      setMessage(res.data?.message || 'Password direset');
-      setMessageType('success');
+      showToast(res.data?.message || 'Password direset', 'success');
       setResetPassword('');
       setResetUser(null);
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Gagal reset password');
-      setMessageType('error');
+      showToast(err.response?.data?.message || 'Gagal reset password', 'error');
     } finally {
       setResetLoading(false);
     }
@@ -152,39 +197,46 @@ const AddUser = () => {
   const handleChangeRole = async () => {
     if (!roleChangeUser) return;
     setRoleChangeLoading(true);
-    setMessage('');
-    setMessageType('info');
     try {
       const nextRole = roleChangeUser.role === 'admin' ? 'user' : 'admin';
       const res = await api.patch(`/users/${roleChangeUser.id}/role`, { role: nextRole });
-      setMessage(res.data?.message || 'Role diubah');
-      setMessageType('success');
+      showToast(res.data?.message || 'Role diubah', 'success');
       await loadUsers();
       setRoleChangeUser(null);
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Gagal mengubah role');
-      setMessageType('error');
+      showToast(err.response?.data?.message || 'Gagal mengubah role', 'error');
     } finally {
       setRoleChangeLoading(false);
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    if (!confirm(`Hapus ${selectedIds.size} user terpilih?`)) return;
-    setMessage('');
-    setMessageType('info');
+  const handleBulkDelete = async (ids) => {
+    const deleteIds = ids || Array.from(selectedIds);
+    if (deleteIds.length === 0) return;
     try {
-      const res = await api.post('/users/bulk-delete', { ids: Array.from(selectedIds) });
-      setMessage(res.data?.message || `Berhasil menghapus ${selectedIds.size} user.`);
-      setMessageType('success');
-      const selectedSet = new Set(selectedIds);
+      const res = await api.post('/users/bulk-delete', { ids: deleteIds });
+      showToast(res.data?.message || `Berhasil menghapus ${deleteIds.length} user.`, 'success');
+      const selectedSet = new Set(deleteIds);
       setUsers((prev) => prev.filter((u) => !selectedSet.has(u.id)));
       setSelectedIds(new Set());
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Gagal menghapus user terpilih');
-      setMessageType('error');
+      showToast(err.response?.data?.message || 'Gagal menghapus user terpilih', 'error');
     }
+  };
+
+  const requestBulkDelete = () => {
+    if (selectedIds.size === 0) {
+      showToast('Pilih minimal satu user untuk dihapus.', 'error');
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    openConfirm({
+      title: 'Hapus user terpilih?',
+      message: `${ids.length} user akan dihapus dari sistem.`,
+      confirmLabel: 'Hapus',
+      tone: 'danger',
+      onConfirm: () => handleBulkDelete(ids)
+    });
   };
   const handleImportFile = async (e) => {
     if (!isAdmin) {
@@ -278,8 +330,7 @@ const AddUser = () => {
       await api.post('/users/import', { records: payloadRecords });
       setImportError('');
       setImportOpen(false);
-      setMessage(`Import berhasil (${payloadRecords.length} data).`);
-      setMessageType('success');
+      showToast(`Import berhasil (${payloadRecords.length} data).`, 'success');
       setImportHeaders([]);
       setImportRows([]);
       setImportPreview([]);
@@ -289,7 +340,6 @@ const AddUser = () => {
       await loadUsers();
     } catch (err) {
       setImportError(err.response?.data?.message || 'Gagal import user');
-      setMessageType('error');
     }
   };
 
@@ -335,18 +385,6 @@ const AddUser = () => {
               Buat akun dengan cepat. Role default <span className="font-semibold">user</span> sehingga akses terbatas
               hanya pada penugasan.
             </div>
-            {message && (
-              <div
-                className={`px-4 py-3 rounded-xl border text-sm ${messageType === 'success'
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : messageType === 'error'
-                    ? 'bg-rose-50 border-rose-200 text-rose-700'
-                    : 'bg-slate-50 border-slate-200 text-slate-700'
-                  }`}
-              >
-                {message}
-              </div>
-            )}
             <form onSubmit={handleSubmit} className="space-y-3 max-w-2xl">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -443,7 +481,7 @@ const AddUser = () => {
           <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
             <span>{selectedIds.size} user dipilih</span>
             <button
-              onClick={handleBulkDelete}
+              onClick={requestBulkDelete}
               className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
             >
               Hapus semua
@@ -924,6 +962,19 @@ const AddUser = () => {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        loading={confirmDialog.loading}
+        onConfirm={handleConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 };

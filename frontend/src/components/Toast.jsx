@@ -11,13 +11,22 @@ const Toast = ({ toast, onClose }) => {
       <div className={`px-4 py-3 rounded-2xl border shadow-soft max-w-sm ${base}`}>
         <div className="flex items-start gap-3">
           <div className="text-sm font-semibold flex-1">{toast.message}</div>
+          {toast.action && (
+            <button
+              type="button"
+              onClick={toast.action.onClick}
+              className="text-xs font-semibold text-slate-700 hover:text-slate-900 underline"
+            >
+              {toast.action.label}
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
             className="text-sm text-slate-500 hover:text-slate-800"
             aria-label="Tutup"
           >
-            ×
+            x
           </button>
         </div>
       </div>

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DEFAULT_TEMPLATES from '../constants/templates';
 import { useAuth } from '../context/AuthContext';
+import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const MAX_VERSIONS = 10;
 const AUTOSAVE_DELAY = 800;
@@ -27,6 +29,17 @@ const TemplateEditor = () => {
   };
 
   const [customTemplates, setCustomTemplates] = useState(() => readTemplates(roleKey));
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Konfirmasi',
+    cancelLabel: 'Batal',
+    tone: 'default',
+    loading: false,
+    onConfirm: null
+  });
 
   useEffect(() => {
     const data = readTemplates(roleKey);
@@ -40,6 +53,52 @@ const TemplateEditor = () => {
     }
     // eslint-disable-next-line react-hooks-exhaustive-deps
   }, [roleKey]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message, type = 'info') => {
+    if (!message) return;
+    setToast({ message, type });
+  };
+
+  const openConfirm = (config) => {
+    setConfirmDialog({
+      open: true,
+      title: config.title || 'Konfirmasi',
+      message: config.message || '',
+      confirmLabel: config.confirmLabel || 'Konfirmasi',
+      cancelLabel: config.cancelLabel || 'Batal',
+      tone: config.tone || 'default',
+      loading: false,
+      onConfirm: config.onConfirm || null
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmDialog((prev) => ({
+      ...prev,
+      open: false,
+      loading: false,
+      onConfirm: null
+    }));
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmDialog.onConfirm) {
+      closeConfirm();
+      return;
+    }
+    setConfirmDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      await confirmDialog.onConfirm();
+    } finally {
+      closeConfirm();
+    }
+  };
 
   const defaultIds = useMemo(() => new Set(DEFAULT_TEMPLATES.map((t) => t.id)), []);
 
@@ -59,7 +118,6 @@ const TemplateEditor = () => {
   const [description, setDescription] = useState(activeTemplate?.description || '');
   const [subject, setSubject] = useState(activeTemplate?.subject || '');
   const [body, setBody] = useState(activeTemplate?.body || '');
-  const [toast, setToast] = useState('');
   const [history, setHistory] = useState([]);
   const [future, setFuture] = useState([]);
   const [confirmingSave, setConfirmingSave] = useState(false);
@@ -174,7 +232,7 @@ const TemplateEditor = () => {
   const saveTemplate = () => {
     if (!canEdit) return;
     if (!name.trim() || !subject.trim() || !body.trim()) {
-      setToast('Nama, subjek, dan body wajib diisi.');
+      showToast('Nama, subjek, dan body wajib diisi.', 'error');
       return;
     }
     const isExistingCustom = customTemplates.some((t) => t.id === selectedTemplateId);
@@ -202,7 +260,7 @@ const TemplateEditor = () => {
     saveDraft(targetId, newTpl);
     setSelectedTemplateId(targetId);
     setIsNew(false);
-    setToast(isExistingCustom || isDefaultSelected ? 'Template diperbarui.' : 'Template baru dibuat.');
+    showToast(isExistingCustom || isDefaultSelected ? 'Template diperbarui.' : 'Template baru dibuat.', 'success');
     setConfirmingSave(false);
   };
   const handleSaveClick = () => {
@@ -222,21 +280,27 @@ const TemplateEditor = () => {
   const handleDelete = () => {
     if (!canEdit) return;
     if (!isDeletable) {
-      setToast('Template bawaan tidak bisa dihapus, hanya dapat diubah atau di-override.');
+      showToast('Template bawaan tidak bisa dihapus, hanya dapat diubah atau di-override.', 'error');
       return;
     }
-    const confirm = window.confirm('Hapus template inix');
-    if (!confirm) return;
-    setCustomTemplates((prev) => {
-      const updated = prev.filter((t) => t.id !== selectedTemplateId);
-      localStorage.setItem(roleKey, JSON.stringify(updated));
-      localStorage.removeItem(versionKey(selectedTemplateId));
-      return updated;
+    openConfirm({
+      title: 'Hapus template?',
+      message: 'Template ini akan dihapus dari daftar kustom.',
+      confirmLabel: 'Hapus',
+      tone: 'danger',
+      onConfirm: () => {
+        setCustomTemplates((prev) => {
+          const updated = prev.filter((t) => t.id !== selectedTemplateId);
+          localStorage.setItem(roleKey, JSON.stringify(updated));
+          localStorage.removeItem(versionKey(selectedTemplateId));
+          return updated;
+        });
+        const fallbackId = defaultIds.has(selectedTemplateId) ? selectedTemplateId : DEFAULT_TEMPLATES[0].id;
+        setSelectedTemplateId(fallbackId);
+        setIsNew(false);
+        showToast('Template dihapus. Template bawaan akan dipakai jika tersedia.', 'success');
+      }
     });
-    const fallbackId = defaultIds.has(selectedTemplateId) ? selectedTemplateId : DEFAULT_TEMPLATES[0].id;
-    setSelectedTemplateId(fallbackId);
-    setIsNew(false);
-    setToast('Template dihapus. Template bawaan akan dipakai jika tersedia.');
   };
 
   const handleReset = () => {
@@ -245,7 +309,7 @@ const TemplateEditor = () => {
       setDescription('');
       setSubject('');
       setBody('');
-      setToast('Draft baru dikosongkan.');
+      showToast('Draft baru dikosongkan.', 'success');
       return;
     }
     const tpl = DEFAULT_TEMPLATES.find((t) => t.id === selectedTemplateId) || DEFAULT_TEMPLATES[0];
@@ -253,7 +317,7 @@ const TemplateEditor = () => {
     setDescription(tpl.description || '');
     setSubject(tpl.subject);
     setBody(tpl.body);
-    setToast('Di-reset ke versi default.');
+    showToast('Di-reset ke versi default.', 'success');
   };
 
   const handleRestoreVersion = (ver) => {
@@ -262,7 +326,7 @@ const TemplateEditor = () => {
     setDescription(ver.description || '');
     setSubject(ver.subject);
     setBody(ver.body);
-    setToast('Versi sebelumnya dipulihkan. Simpan untuk menetapkan.');
+    showToast('Versi sebelumnya dipulihkan. Simpan untuk menetapkan.', 'success');
   };
 
   useEffect(() => {
@@ -432,11 +496,6 @@ const TemplateEditor = () => {
                 </div>
               )}
                 <div className="flex items-center gap-2 flex-wrap justify-end min-h-[32px]">
-                  {toast && (
-                    <span className="text-sm px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700">
-                      {toast}
-                    </span>
-                  )}
                   <span
                     className={`text-xs font-semibold px-3 py-1.5 rounded-xl border ${
                       overwriteWarning.includes('menimpa')
@@ -526,11 +585,6 @@ const TemplateEditor = () => {
             </div>
           </div>
 
-          {toast && (
-            <div className="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
-              {toast}
-            </div>
-          )}
         </div>
 
         <div className="bg-gradient-to-br from-slate-50 to-white rounded-3xl border border-slate-200 shadow-soft p-6">
@@ -628,6 +682,19 @@ const TemplateEditor = () => {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        loading={confirmDialog.loading}
+        onConfirm={handleConfirm}
+        onCancel={closeConfirm}
+      />
     </>
   );
 };

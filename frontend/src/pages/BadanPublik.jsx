@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx';
 import { computeDueInfo } from '../utils/workdays';
 import { getMonitoringMap, saveMonitoringMap } from '../utils/monitoring';
 import { fetchHolidays } from '../services/holidays';
+import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const emptyForm = {
   nama_badan_publik: '',
@@ -61,6 +63,16 @@ const normalizePhone = (val) => {
   return `0${cleaned}`;
 };
 
+const decodeHtml = (val) => {
+  if (!val) return '';
+  try {
+    const doc = new DOMParser().parseFromString(String(val), 'text/html');
+    return doc.documentElement.textContent || '';
+  } catch (_err) {
+    return String(val);
+  }
+};
+
 const isValidEmail = (val) => {
   if (!val) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
@@ -110,7 +122,17 @@ const BadanPublik = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Konfirmasi',
+    cancelLabel: 'Batal',
+    tone: 'default',
+    loading: false,
+    onConfirm: null
+  });
   const [forceDeleteIds, setForceDeleteIds] = useState([]);
   const [forceDeleting, setForceDeleting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -175,6 +197,52 @@ const BadanPublik = () => {
     loadHolidays();
   }, []);
 
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message, type = 'info', action) => {
+    if (!message) return;
+    setToast({ message, type, action });
+  };
+
+  const openConfirm = (config) => {
+    setConfirmDialog({
+      open: true,
+      title: config.title || 'Konfirmasi',
+      message: config.message || '',
+      confirmLabel: config.confirmLabel || 'Konfirmasi',
+      cancelLabel: config.cancelLabel || 'Batal',
+      tone: config.tone || 'default',
+      loading: false,
+      onConfirm: config.onConfirm || null
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmDialog((prev) => ({
+      ...prev,
+      open: false,
+      loading: false,
+      onConfirm: null
+    }));
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmDialog.onConfirm) {
+      closeConfirm();
+      return;
+    }
+    setConfirmDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      await confirmDialog.onConfirm();
+    } finally {
+      closeConfirm();
+    }
+  };
+
   const samplePreview = useMemo(() => data.slice(0, 3), [data]);
   const filteredData = useMemo(() => {
     if (emailFilter === 'with-email') return data.filter((d) => d.email);
@@ -189,7 +257,7 @@ const BadanPublik = () => {
   const openForm = (item) => {
     // Admin bisa tambah/edit; user hanya boleh edit data yang sudah ada (misal koreksi email)
     if (!isAdmin && !item) {
-      setStatusMessage('Hanya admin yang bisa menambah data baru.');
+      showToast('Hanya admin yang bisa menambah data baru.', 'error');
       return;
     }
     if (item) {
@@ -214,21 +282,21 @@ const BadanPublik = () => {
     e.preventDefault();
     // User boleh edit data (editingId ada), tapi tidak boleh tambah data baru
     if (!isAdmin && !editingId) {
-      setStatusMessage('Hanya admin yang bisa menambah data baru.');
+      showToast('Hanya admin yang bisa menambah data baru.', 'error');
       return;
     }
     try {
       if (editingId) {
         await api.put(`/badan-publik/${editingId}`, formData);
-        setStatusMessage('Data diperbarui.');
+        showToast('Data diperbarui.', 'success');
       } else {
         await api.post('/badan-publik', formData);
-        setStatusMessage('Data ditambahkan.');
+        showToast('Data ditambahkan.', 'success');
       }
       setFormOpen(false);
       fetchData();
     } catch (err) {
-      setStatusMessage(err.response?.data?.message || 'Gagal menyimpan data');
+      showToast(err.response?.data?.message || 'Gagal menyimpan data', 'error');
     }
   };
 
@@ -248,24 +316,35 @@ const BadanPublik = () => {
     });
   };
 
-  const deleteData = async (id) => {
-    if (!isAdmin) {
-      setStatusMessage('Akses ditolak: hanya admin yang bisa menghapus data.');
-      return;
-    }
-    if (!confirm('Hapus data ini?')) return;
+  const performDelete = async (id) => {
     try {
       await api.delete(`/badan-publik/${id}`);
-      setStatusMessage('Data dihapus.');
+      showToast('Data dihapus.', 'success');
       setForceDeleteIds([]);
       applyLocalDelete([id]);
     } catch (err) {
       const msg = err.response?.data?.message || 'Gagal menghapus data';
-      setStatusMessage(msg);
       if (err.response?.status === 409) {
         setForceDeleteIds([id]);
+        showToast(msg, 'error', { label: 'Force delete', onClick: handleForceDelete });
+        return;
       }
+      showToast(msg, 'error');
     }
+  };
+
+  const deleteData = (id) => {
+    if (!isAdmin) {
+      showToast('Akses ditolak: hanya admin yang bisa menghapus data.', 'error');
+      return;
+    }
+    openConfirm({
+      title: 'Hapus data badan publik?',
+      message: 'Data badan publik ini akan dihapus dari sistem.',
+      confirmLabel: 'Hapus',
+      tone: 'danger',
+      onConfirm: () => performDelete(id)
+    });
   };
 
   const toggleSelect = (id) => {
@@ -280,56 +359,80 @@ const BadanPublik = () => {
     setSelectedIds(filteredData.map((item) => item.id));
   };
 
-  const handleBulkDelete = async () => {
+  const performBulkDelete = async (ids) => {
     if (!isAdmin) {
-      setStatusMessage('Akses ditolak: hanya admin yang bisa menghapus data.');
+      showToast('Akses ditolak: hanya admin yang bisa menghapus data.', 'error');
       return;
     }
-    if (selectedIds.length === 0) {
-      setStatusMessage('Pilih minimal satu data untuk dihapus.');
+    if (ids.length === 0) {
+      showToast('Pilih minimal satu data untuk dihapus.', 'error');
       return;
     }
-    if (!confirm(`Hapus ${selectedIds.length} data badan publik?`)) return;
     try {
-      const res = await api.post('/badan-publik/bulk-delete', { ids: selectedIds });
-      setStatusMessage(res.data?.message || `Berhasil menghapus ${selectedIds.length} data.`);
+      const res = await api.post('/badan-publik/bulk-delete', { ids });
+      showToast(res.data?.message || `Berhasil menghapus ${ids.length} data.`, 'success');
       setForceDeleteIds([]);
-      applyLocalDelete(selectedIds);
+      applyLocalDelete(ids);
       setSelectedIds([]);
     } catch (err) {
       const msg = err.response?.data?.message || 'Gagal menghapus data terpilih';
-      setStatusMessage(msg);
       if (err.response?.status === 409) {
-        setForceDeleteIds(selectedIds);
+        setForceDeleteIds(ids);
+        showToast(msg, 'error', { label: 'Force delete', onClick: handleForceDelete });
+        return;
       }
+      showToast(msg, 'error');
     }
   };
 
-  const handleForceDelete = async () => {
-    if (forceDeleteIds.length === 0) return;
-    if (
-      !confirm(
-        `Force delete akan menghapus badan publik beserta data terhubung (riwayat penugasan/log/laporan). Lanjutkan?`
-      )
-    ) {
+  const handleBulkDelete = () => {
+    if (!isAdmin) {
+      showToast('Akses ditolak: hanya admin yang bisa menghapus data.', 'error');
       return;
     }
+    if (selectedIds.length === 0) {
+      showToast('Pilih minimal satu data untuk dihapus.', 'error');
+      return;
+    }
+    const ids = [...selectedIds];
+    openConfirm({
+      title: 'Hapus data terpilih?',
+      message: `${ids.length} data badan publik akan dihapus.`,
+      confirmLabel: 'Hapus',
+      tone: 'danger',
+      onConfirm: () => performBulkDelete(ids)
+    });
+  };
+
+  const performForceDelete = async (ids) => {
+    if (ids.length === 0) return;
     setForceDeleting(true);
-    setStatusMessage('');
     try {
       const res = await api.post('/badan-publik/bulk-delete', {
-        ids: forceDeleteIds,
+        ids,
         force: true
       });
-      setStatusMessage(res.data?.message || 'Force delete berhasil.');
-      applyLocalDelete(forceDeleteIds);
+      showToast(res.data?.message || 'Force delete berhasil.', 'success');
+      applyLocalDelete(ids);
       setForceDeleteIds([]);
     } catch (err) {
       const msg = err.response?.data?.message || 'Force delete gagal.';
-      setStatusMessage(msg);
+      showToast(msg, 'error');
     } finally {
       setForceDeleting(false);
     }
+  };
+
+  const handleForceDelete = () => {
+    if (forceDeleteIds.length === 0) return;
+    const ids = [...forceDeleteIds];
+    openConfirm({
+      title: 'Force delete data?',
+      message: 'Force delete akan menghapus badan publik beserta data terhubung (riwayat penugasan, log, laporan).',
+      confirmLabel: 'Force delete',
+      tone: 'danger',
+      onConfirm: () => performForceDelete(ids)
+    });
   };
 
   const handleImportFile = async (e) => {
@@ -555,7 +658,7 @@ const BadanPublik = () => {
       await api.post('/badan-publik/import', { records: payloadRecords });
       setImportError('');
       setImportOpen(false);
-      setStatusMessage(`Import berhasil (${payloadRecords.length} data).`);
+      showToast(`Import berhasil (${payloadRecords.length} data).`, 'success');
       setImportHeaders([]);
       setImportRows([]);
       setImportPreview([]);
@@ -609,6 +712,53 @@ const BadanPublik = () => {
     }
   };
 
+  const performImportAssign = async () => {
+    const mapped = buildAssignPreview(importAssignRows, importAssignHeaders, importAssignMapping);
+    try {
+      setImportAssignLoading(true);
+      setImportAssignSimulated('');
+      const controller = new AbortController();
+      setImportAssignController(controller);
+      const payloadRecords = mapped.map((r) => ({
+        nama_badan_publik: r.nama_badan_publik,
+        kategori: r.kategori,
+        website: r.website,
+        email: r.email,
+        lembaga: r.lembaga,
+        pertanyaan: r.pertanyaan,
+        nama_penguji: r.nama_penguji,
+        email_penguji: r.email_penguji,
+        no_hp_penguji: r.no_hp_penguji
+      }));
+      const res = await api.post('/badan-publik/import-assign', { records: payloadRecords }, { signal: controller.signal });
+      setImportAssignError('');
+      setImportAssignOpen(false);
+      const stats = res.data?.stats;
+      const detail = stats
+        ? `Dibuat ${stats.created}, user ${stats.createdUsers}, penugasan ${stats.assigned}, duplikat ${stats.skippedExisting}.`
+        : '';
+      showToast(res.data?.message || `Import berhasil (${payloadRecords.length} data). ${detail}`.trim(), 'success');
+      setImportAssignHeaders([]);
+      setImportAssignRows([]);
+      setImportAssignPreview([]);
+      setImportAssignIssues([]);
+      setImportAssignSummary(null);
+      const resetMap = {};
+      assignmentImportFields.forEach((f) => (resetMap[f.key] = ''));
+      setImportAssignMapping(resetMap);
+      fetchData();
+    } catch (err) {
+      if (err?.name === 'CanceledError') {
+        setImportAssignError('Proses import dibatalkan.');
+      } else {
+        setImportAssignError(err.response?.data?.message || 'Gagal import + penugasan');
+      }
+    } finally {
+      setImportAssignLoading(false);
+      setImportAssignController(null);
+    }
+  };
+
   const submitImportAssign = async () => {
     if (!isAdmin) {
       setImportAssignError('Akses ditolak: import hanya untuk admin.');
@@ -639,55 +789,20 @@ const BadanPublik = () => {
       );
       return;
     }
-    const proceed = confirm(
-      `Konfirmasi import:\nTotal baris: ${summary?.total || 0}\nValid: ${summary?.valid || 0}\nTanpa penguji lengkap: ${summary?.missingAssignee || 0}\nDuplikat email: ${summary?.duplicateEmail || 0}\nNama badan publik sudah ada di database: ${summary?.duplicateName || 0}`
-    );
-    if (!proceed) return;
-
-    const mapped = buildAssignPreview(importAssignRows, importAssignHeaders, importAssignMapping);
-    try {
-      setImportAssignLoading(true);
-      setImportAssignSimulated('');
-      const controller = new AbortController();
-      setImportAssignController(controller);
-      const payloadRecords = mapped.map((r) => ({
-        nama_badan_publik: r.nama_badan_publik,
-        kategori: r.kategori,
-        website: r.website,
-        email: r.email,
-        lembaga: r.lembaga,
-        pertanyaan: r.pertanyaan,
-        nama_penguji: r.nama_penguji,
-        email_penguji: r.email_penguji,
-        no_hp_penguji: r.no_hp_penguji
-      }));
-      const res = await api.post('/badan-publik/import-assign', { records: payloadRecords }, { signal: controller.signal });
-      setImportAssignError('');
-      setImportAssignOpen(false);
-      const stats = res.data?.stats;
-      const detail = stats
-        ? `Dibuat ${stats.created}, user ${stats.createdUsers}, penugasan ${stats.assigned}, duplikat ${stats.skippedExisting}.`
-        : '';
-      setStatusMessage(res.data?.message || `Import berhasil (${payloadRecords.length} data). ${detail}`.trim());
-      setImportAssignHeaders([]);
-      setImportAssignRows([]);
-      setImportAssignPreview([]);
-      setImportAssignIssues([]);
-      setImportAssignSummary(null);
-      const resetMap = {};
-      assignmentImportFields.forEach((f) => (resetMap[f.key] = ''));
-      setImportAssignMapping(resetMap);
-      fetchData();
-    } catch (err) {
-      if (err?.name === 'CanceledError') {
-        setImportAssignError('Proses import dibatalkan.');
-      } else {
-        setImportAssignError(err.response?.data?.message || 'Gagal import + penugasan');
-      }
-    } finally {
-      setImportAssignLoading(false);
-      setImportAssignController(null);
-    }
+    const summaryMessage = [
+      `Total baris: ${summary?.total || 0}`,
+      `Valid: ${summary?.valid || 0}`,
+      `Tanpa penguji lengkap: ${summary?.missingAssignee || 0}`,
+      `Duplikat email: ${summary?.duplicateEmail || 0}`,
+      `Nama badan publik sudah ada di database: ${summary?.duplicateName || 0}`
+    ].join('\n');
+    openConfirm({
+      title: 'Konfirmasi import',
+      message: summaryMessage,
+      confirmLabel: 'Import',
+      tone: 'primary',
+      onConfirm: performImportAssign
+    });
   };
 
   const simulateImportAssign = () => {
@@ -748,21 +863,6 @@ const BadanPublik = () => {
           </div>
         )}
       </div>
-
-      {statusMessage && (
-        <div className="p-3 rounded-xl bg-white border border-slate-200 text-sm text-slate-700 flex items-center justify-between gap-3 flex-wrap">
-          <span>{statusMessage}</span>
-          {forceDeleteIds.length > 0 && (
-            <button
-              onClick={handleForceDelete}
-              disabled={forceDeleting}
-              className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 disabled:opacity-60"
-            >
-              {forceDeleting ? 'Memproses...' : 'Force delete'}
-            </button>
-          )}
-        </div>
-      )}
 
       {isAdmin && selectedIds.length > 0 && (
         <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
@@ -877,7 +977,7 @@ const BadanPublik = () => {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-slate-700">{truncate(item.website || '-', 36)}</td>
+                    <td className="px-3 py-2 text-slate-700">{truncate(decodeHtml(item.website) || '-', 36)}</td>
                     <td className="px-3 py-2 text-slate-700 whitespace-pre-wrap w-[22%] min-w-[320px] align-top">
                       {truncate(item.pertanyaan || '-', 60)}
                     </td>
@@ -1176,7 +1276,7 @@ const BadanPublik = () => {
                           <td className="py-1">{row.nama_badan_publik}</td>
                           <td className="py-1">{row.kategori}</td>
                           <td className="py-1">{row.email}</td>
-                          <td className="py-1">{row.website}</td>
+                          <td className="py-1">{decodeHtml(row.website)}</td>
                           <td className="py-1">{truncate(row.pertanyaan, 30)}</td>
                         </tr>
                       ))
@@ -1211,7 +1311,7 @@ const BadanPublik = () => {
                           <td className="py-1">{row.nama_badan_publik}</td>
                           <td className="py-1">{row.kategori}</td>
                           <td className="py-1">{row.email}</td>
-                          <td className="py-1">{row.website}</td>
+                          <td className="py-1">{decodeHtml(row.website)}</td>
                           <td className="py-1">{truncate(row.pertanyaan, 30)}</td>
                         </tr>
                       ))
@@ -1419,7 +1519,7 @@ const BadanPublik = () => {
                           <td className="py-1">{row.nama_badan_publik}</td>
                           <td className="py-1">{row.kategori}</td>
                           <td className="py-1">{truncate(row.email, 24)}</td>
-                          <td className="py-1">{truncate(row.website, 24)}</td>
+                          <td className="py-1">{truncate(decodeHtml(row.website), 24)}</td>
                           <td className="py-1">{truncate(row.lembaga, 18)}</td>
                           <td className="py-1">{truncate(row.nama_penguji, 16)}</td>
                           <td className="py-1">{truncate(row.email_penguji, 24)}</td>
@@ -1463,6 +1563,19 @@ const BadanPublik = () => {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        loading={confirmDialog.loading || forceDeleting || importAssignLoading}
+        onConfirm={handleConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 };

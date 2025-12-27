@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { adminListUjiAksesReports, getUjiAksesQuestions } from '../services/reports';
+import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -29,7 +31,17 @@ const AdminUjiAksesReports = () => {
   const [questions, setQuestions] = useState([]);
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Konfirmasi',
+    cancelLabel: 'Batal',
+    tone: 'default',
+    loading: false,
+    onConfirm: null
+  });
   const [selectedIds, setSelectedIds] = useState([]);
 
   const [q, setQ] = useState('');
@@ -49,7 +61,6 @@ const AdminUjiAksesReports = () => {
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
-    setError('');
     try {
       const data = await adminListUjiAksesReports({
         q: q || undefined,
@@ -61,7 +72,7 @@ const AdminUjiAksesReports = () => {
       setReports(data || []);
     } catch (err) {
       setReports([]);
-      setError(err.response?.data?.message || 'Gagal memuat laporan admin');
+      showToast(err.response?.data?.message || 'Gagal memuat laporan admin', 'error');
     } finally {
       setLoading(false);
     }
@@ -96,6 +107,52 @@ const AdminUjiAksesReports = () => {
   useEffect(() => {
     if (isAdmin) loadQuestions();
   }, [isAdmin, loadQuestions]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message, type = 'info') => {
+    if (!message) return;
+    setToast({ message, type });
+  };
+
+  const openConfirm = (config) => {
+    setConfirmDialog({
+      open: true,
+      title: config.title || 'Konfirmasi',
+      message: config.message || '',
+      confirmLabel: config.confirmLabel || 'Konfirmasi',
+      cancelLabel: config.cancelLabel || 'Batal',
+      tone: config.tone || 'default',
+      loading: false,
+      onConfirm: config.onConfirm || null
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmDialog((prev) => ({
+      ...prev,
+      open: false,
+      loading: false,
+      onConfirm: null
+    }));
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmDialog.onConfirm) {
+      closeConfirm();
+      return;
+    }
+    setConfirmDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      await confirmDialog.onConfirm();
+    } finally {
+      closeConfirm();
+    }
+  };
 
   const sorted = useMemo(() => (reports || []).slice(), [reports]);
   const totalReports = sorted.length;
@@ -155,22 +212,36 @@ const AdminUjiAksesReports = () => {
     setSelectedIds(allSelected ? [] : ids);
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) {
-      setError('Pilih minimal satu laporan untuk dihapus.');
+  const handleBulkDelete = async (ids) => {
+    const deleteIds = ids || selectedIds;
+    if (deleteIds.length === 0) {
+      showToast('Pilih minimal satu laporan untuk dihapus.', 'error');
       return;
     }
-    if (!confirm(`Hapus ${selectedIds.length} laporan terpilih?`)) return;
-    setError('');
     try {
-      const res = await api.post('/api/admin/reports/bulk-delete', { ids: selectedIds });
-      const selectedSet = new Set(selectedIds);
+      const res = await api.post('/api/admin/reports/bulk-delete', { ids: deleteIds });
+      const selectedSet = new Set(deleteIds);
       setReports((prev) => prev.filter((item) => !selectedSet.has(item.id)));
       setSelectedIds([]);
-      setError(res.data?.message || '');
+      showToast(res.data?.message || 'Laporan terhapus.', 'success');
     } catch (err) {
-      setError(err.response?.data?.message || 'Gagal menghapus laporan terpilih.');
+      showToast(err.response?.data?.message || 'Gagal menghapus laporan terpilih.', 'error');
     }
+  };
+
+  const requestBulkDelete = () => {
+    if (selectedIds.length === 0) {
+      showToast('Pilih minimal satu laporan untuk dihapus.', 'error');
+      return;
+    }
+    const ids = [...selectedIds];
+    openConfirm({
+      title: 'Hapus laporan terpilih?',
+      message: `${ids.length} laporan akan dihapus dari sistem.`,
+      confirmLabel: 'Hapus',
+      tone: 'danger',
+      onConfirm: () => handleBulkDelete(ids)
+    });
   };
 
   const exportCsv = async () => {
@@ -377,15 +448,11 @@ const AdminUjiAksesReports = () => {
           </div>
         </div>
       </div>
-      {error && (
-        <div className="px-4 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-sm">{error}</div>
-      )}
-
       {selectedIds.length > 0 && (
         <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
           <span>{selectedIds.length} laporan dipilih</span>
           <button
-            onClick={handleBulkDelete}
+            onClick={requestBulkDelete}
             className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
           >
             Hapus terpilih
@@ -465,6 +532,19 @@ const AdminUjiAksesReports = () => {
           </tbody>
         </table>
       </div>
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        loading={confirmDialog.loading}
+        onConfirm={handleConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 };

@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Toast from '../components/Toast';
 
 const Tentang = () => {
   const { user } = useAuth();
@@ -10,24 +11,34 @@ const Tentang = () => {
   const [resetOpen, setResetOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [resetting, setResetting] = useState(false);
-  const [resetMessage, setResetMessage] = useState('');
+  const [toast, setToast] = useState(null);
 
   const canReset = useMemo(
     () => confirmText.trim().toLowerCase() === 'saya yakin',
     [confirmText]
   );
 
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message, type = 'info') => {
+    if (!message) return;
+    setToast({ message, type });
+  };
+
   const handleReset = async () => {
     if (!canReset || resetting) return;
     setResetting(true);
-    setResetMessage('');
     try {
       const res = await api.post('/config/reset');
-      setResetMessage(res.data?.message || 'Reset database berhasil.');
+      showToast(res.data?.message || 'Reset database berhasil.', 'success');
       setConfirmText('');
       setResetOpen(false);
     } catch (err) {
-      setResetMessage(err.response?.data?.message || 'Reset database gagal.');
+      showToast(err.response?.data?.message || 'Reset database gagal.', 'error');
     } finally {
       setResetting(false);
     }
@@ -70,7 +81,7 @@ const Tentang = () => {
               </div>
               <button
                 onClick={() => {
-                  setResetMessage('');
+                  setToast(null);
                   setConfirmText('');
                   setResetOpen(true);
                 }}
@@ -79,9 +90,6 @@ const Tentang = () => {
                 Reset Database
               </button>
             </div>
-            {resetMessage && (
-              <div className="mt-4 text-sm font-semibold text-slate-700">{resetMessage}</div>
-            )}
           </div>
         )}
       </div>
@@ -127,6 +135,8 @@ const Tentang = () => {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 };

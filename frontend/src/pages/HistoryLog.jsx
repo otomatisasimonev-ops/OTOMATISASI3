@@ -4,6 +4,8 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fetchHolidays } from '../services/holidays';
 import { computeDueInfo } from '../utils/workdays';
+import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const HistoryLog = () => {
   const { user } = useAuth();
@@ -15,7 +17,17 @@ const HistoryLog = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState(isAdmin ? 'all' : 'mine');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [infoMessage, setInfoMessage] = useState('');
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Konfirmasi',
+    cancelLabel: 'Batal',
+    tone: 'default',
+    loading: false,
+    onConfirm: null
+  });
   const [streamStatus, setStreamStatus] = useState('idle');
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -27,6 +39,52 @@ const HistoryLog = () => {
     const url = api.defaults?.baseURL || import.meta.env.VITE_API_URL || 'http://localhost:5000';
     return url.replace(/\/$/, '');
   }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message, type = 'info') => {
+    if (!message) return;
+    setToast({ message, type });
+  };
+
+  const openConfirm = (config) => {
+    setConfirmDialog({
+      open: true,
+      title: config.title || 'Konfirmasi',
+      message: config.message || '',
+      confirmLabel: config.confirmLabel || 'Konfirmasi',
+      cancelLabel: config.cancelLabel || 'Batal',
+      tone: config.tone || 'default',
+      loading: false,
+      onConfirm: config.onConfirm || null
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmDialog((prev) => ({
+      ...prev,
+      open: false,
+      loading: false,
+      onConfirm: null
+    }));
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmDialog.onConfirm) {
+      closeConfirm();
+      return;
+    }
+    setConfirmDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      await confirmDialog.onConfirm();
+    } finally {
+      closeConfirm();
+    }
+  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -51,7 +109,6 @@ const HistoryLog = () => {
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
-    setInfoMessage('');
     try {
       const res = await api.get('/email/logs');
       const sorted = (res.data || []).sort(
@@ -61,7 +118,7 @@ const HistoryLog = () => {
       setSelectedIds([]);
     } catch (err) {
       console.error(err);
-      setInfoMessage(err.response?.data?.message || 'Gagal memuat log');
+      showToast(err.response?.data?.message || 'Gagal memuat log', 'error');
     } finally {
       setLoading(false);
     }
@@ -303,7 +360,7 @@ const HistoryLog = () => {
         )
       );
     } catch (err) {
-      setInfoMessage(err.response?.data?.message || 'Gagal memperbarui status');
+      showToast(err.response?.data?.message || 'Gagal memperbarui status', 'error');
     }
   };
 
@@ -332,34 +389,47 @@ const HistoryLog = () => {
 
   const handleRetry = async (log) => {
     setRetryingId(log.id);
-    setInfoMessage('');
     try {
       await api.post(`/email/retry/${log.id}`);
-      setInfoMessage('Retry dikirim');
+      showToast('Retry dikirim', 'success');
       fetchLogs();
     } catch (err) {
-      setInfoMessage(err.response?.data?.message || 'Gagal retry');
+      showToast(err.response?.data?.message || 'Gagal retry', 'error');
     } finally {
       setRetryingId(null);
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) {
-      setInfoMessage('Pilih minimal satu log untuk dihapus.');
+  const handleBulkDelete = async (ids) => {
+    const deleteIds = ids || selectedIds;
+    if (deleteIds.length === 0) {
+      showToast('Pilih minimal satu log untuk dihapus.', 'error');
       return;
     }
-    if (!confirm(`Hapus ${selectedIds.length} log terpilih?`)) return;
-    setInfoMessage('');
     try {
-      const res = await api.post('/email/logs/bulk-delete', { ids: selectedIds });
-      setInfoMessage(res.data?.message || 'Log terhapus.');
-      const selectedSet = new Set(selectedIds);
+      const res = await api.post('/email/logs/bulk-delete', { ids: deleteIds });
+      showToast(res.data?.message || 'Log terhapus.', 'success');
+      const selectedSet = new Set(deleteIds);
       setLogs((prev) => prev.filter((item) => !selectedSet.has(item.id)));
       setSelectedIds([]);
     } catch (err) {
-      setInfoMessage(err.response?.data?.message || 'Gagal menghapus log terpilih.');
+      showToast(err.response?.data?.message || 'Gagal menghapus log terpilih.', 'error');
     }
+  };
+
+  const requestBulkDelete = () => {
+    if (selectedIds.length === 0) {
+      showToast('Pilih minimal satu log untuk dihapus.', 'error');
+      return;
+    }
+    const ids = [...selectedIds];
+    openConfirm({
+      title: 'Hapus log terpilih?',
+      message: `${ids.length} log akan dihapus dari riwayat.`,
+      confirmLabel: 'Hapus',
+      tone: 'danger',
+      onConfirm: () => handleBulkDelete(ids)
+    });
   };
 
   return (
@@ -491,9 +561,6 @@ const HistoryLog = () => {
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
               />
             </div>
-            {infoMessage && (
-              <div className="text-sm text-primary font-semibold">{infoMessage}</div>
-            )}
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl p-4 text-sm text-slate-700">
             <div className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mb-2">Timeline singkat</div>
@@ -524,7 +591,7 @@ const HistoryLog = () => {
           <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
             <span>{selectedIds.length} log dipilih</span>
             <button
-              onClick={handleBulkDelete}
+              onClick={requestBulkDelete}
               className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
             >
               Hapus terpilih
@@ -792,6 +859,19 @@ const HistoryLog = () => {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        loading={confirmDialog.loading}
+        onConfirm={handleConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 };
