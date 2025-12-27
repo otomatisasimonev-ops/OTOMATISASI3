@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { adminListUjiAksesReports, getUjiAksesQuestions } from '../services/reports';
-import Toast from '../components/Toast';
-import ConfirmDialog from '../components/ConfirmDialog';
+import Toast from '../components/common/Toast';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import useToast from '../hooks/useToast';
+import useConfirmDialog from '../hooks/useConfirmDialog';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -31,17 +33,8 @@ const AdminUjiAksesReports = () => {
   const [questions, setQuestions] = useState([]);
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: '',
-    message: '',
-    confirmLabel: 'Konfirmasi',
-    cancelLabel: 'Batal',
-    tone: 'default',
-    loading: false,
-    onConfirm: null
-  });
+  const { toast, showToast, clearToast } = useToast();
+  const { confirmDialog, openConfirm, closeConfirm, handleConfirm } = useConfirmDialog();
   const [selectedIds, setSelectedIds] = useState([]);
 
   const [q, setQ] = useState('');
@@ -108,51 +101,6 @@ const AdminUjiAksesReports = () => {
     if (isAdmin) loadQuestions();
   }, [isAdmin, loadQuestions]);
 
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message, type = 'info') => {
-    if (!message) return;
-    setToast({ message, type });
-  };
-
-  const openConfirm = (config) => {
-    setConfirmDialog({
-      open: true,
-      title: config.title || 'Konfirmasi',
-      message: config.message || '',
-      confirmLabel: config.confirmLabel || 'Konfirmasi',
-      cancelLabel: config.cancelLabel || 'Batal',
-      tone: config.tone || 'default',
-      loading: false,
-      onConfirm: config.onConfirm || null
-    });
-  };
-
-  const closeConfirm = () => {
-    setConfirmDialog((prev) => ({
-      ...prev,
-      open: false,
-      loading: false,
-      onConfirm: null
-    }));
-  };
-
-  const handleConfirm = async () => {
-    if (!confirmDialog.onConfirm) {
-      closeConfirm();
-      return;
-    }
-    setConfirmDialog((prev) => ({ ...prev, loading: true }));
-    try {
-      await confirmDialog.onConfirm();
-    } finally {
-      closeConfirm();
-    }
-  };
 
   const sorted = useMemo(() => (reports || []).slice(), [reports]);
   const totalReports = sorted.length;
@@ -533,7 +481,7 @@ const AdminUjiAksesReports = () => {
         </table>
       </div>
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toast={toast} onClose={clearToast} />
       <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}

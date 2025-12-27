@@ -4,8 +4,12 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fetchHolidays } from '../services/holidays';
 import { computeDueInfo } from '../utils/workdays';
-import Toast from '../components/Toast';
-import ConfirmDialog from '../components/ConfirmDialog';
+import Toast from '../components/common/Toast';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import useToast from '../hooks/useToast';
+import useConfirmDialog from '../hooks/useConfirmDialog';
+import LogDetailModal from '../components/historyLog/LogDetailModal';
+import SenderInfoModal from '../components/historyLog/SenderInfoModal';
 
 const HistoryLog = () => {
   const { user } = useAuth();
@@ -17,17 +21,8 @@ const HistoryLog = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState(isAdmin ? 'all' : 'mine');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [toast, setToast] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: '',
-    message: '',
-    confirmLabel: 'Konfirmasi',
-    cancelLabel: 'Batal',
-    tone: 'default',
-    loading: false,
-    onConfirm: null
-  });
+  const { toast, showToast, clearToast } = useToast();
+  const { confirmDialog, openConfirm, closeConfirm, handleConfirm } = useConfirmDialog();
   const [streamStatus, setStreamStatus] = useState('idle');
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -40,51 +35,6 @@ const HistoryLog = () => {
     return url.replace(/\/$/, '');
   }, []);
 
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message, type = 'info') => {
-    if (!message) return;
-    setToast({ message, type });
-  };
-
-  const openConfirm = (config) => {
-    setConfirmDialog({
-      open: true,
-      title: config.title || 'Konfirmasi',
-      message: config.message || '',
-      confirmLabel: config.confirmLabel || 'Konfirmasi',
-      cancelLabel: config.cancelLabel || 'Batal',
-      tone: config.tone || 'default',
-      loading: false,
-      onConfirm: config.onConfirm || null
-    });
-  };
-
-  const closeConfirm = () => {
-    setConfirmDialog((prev) => ({
-      ...prev,
-      open: false,
-      loading: false,
-      onConfirm: null
-    }));
-  };
-
-  const handleConfirm = async () => {
-    if (!confirmDialog.onConfirm) {
-      closeConfirm();
-      return;
-    }
-    setConfirmDialog((prev) => ({ ...prev, loading: true }));
-    try {
-      await confirmDialog.onConfirm();
-    } finally {
-      closeConfirm();
-    }
-  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -719,148 +669,19 @@ const HistoryLog = () => {
         </div>
       </div>
 
-      {selectedLog && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6 space-y-4 border border-slate-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Detail Log</h3>
-                <p className="text-sm text-slate-500">
-                  {formatDate(selectedLog.sent_at)} - {selectedLog.user?.username}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="text-slate-500 hover:text-slate-800 text-xl font-bold"
-              >x</button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="text-sm text-slate-600">Pengirim</div>
-                <div className="font-semibold text-slate-900">{selectedLog.user?.username || '-'}</div>
-                <div className="text-sm text-slate-600">Target</div>
-                <div className="font-semibold text-slate-900">
-                  {selectedLog.badanPublik?.nama_badan_publik || '-'}
-                </div>
-                <div className="text-sm text-slate-600">Subjek</div>
-                <div className="font-semibold text-slate-900">{selectedLog.subject}</div>
-                <div className="text-sm text-slate-600">Message ID</div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 break-all">
-                    {selectedLog.message_id || '-'}
-                  </span>
-                  {selectedLog.message_id && (
-                    <button
-                      onClick={() => openGmail(selectedLog.message_id)}
-                      className="text-xs font-semibold text-secondary hover:underline"
-                    >
-                      Buka di Gmail
-                    </button>
-                  )}
-                </div>
-                {selectedLog.retry_of_id && (
-                  <div className="text-xs text-slate-500">
-                    Retry dari log #{selectedLog.retry_of_id}
-                  </div>
-                )}
-                {selectedLog.error_message && (
-                  <div className="text-xs text-rose-500">
-                    Error: {selectedLog.error_message}
-                  </div>
-                )}
-                <div className="text-sm text-slate-600">Status</div>
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusBadge(selectedLog.status)}`}>
-                  {selectedLog.status}
-                </span>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-700">Lampiran</div>
-                {Array.isArray(selectedLog.attachments_meta) && selectedLog.attachments_meta.length > 0 ? (
-                  <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
-                    {selectedLog.attachments_meta.map((att) => (
-                      <li key={att.filename}>
-                        {att.filename} ({att.readableSize || att.size || 'x'} | {att.contentType || 'unknown'})
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-500">Tidak ada info lampiran</p>
-                )}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-700 mb-2">Body Email</div>
-              <div className="border border-slate-200 rounded-xl p-3 max-h-72 overflow-auto text-sm leading-6 text-slate-800 bg-slate-50">
-                {selectedLog.body ? (
-                  <div dangerouslySetInnerHTML={{ __html: selectedLog.body }} />
-                ) : (
-                  'Body kosong'
-                )}
-              </div>
-            </div>
-              <div className="flex justify-end gap-2">
-              {selectedLog.status === 'failed' && (
-                <button
-                  onClick={() => handleRetry(selectedLog)}
-                  disabled={retryingId === selectedLog.id}
-                  className="px-4 py-3 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                >
-                  {retryingId === selectedLog.id ? 'Retrying...' : 'Retry kirim'}
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="px-4 py-3 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LogDetailModal
+        log={selectedLog}
+        onClose={() => setSelectedLog(null)}
+        onRetry={handleRetry}
+        retryingId={retryingId}
+        openGmail={openGmail}
+        statusBadge={statusBadge}
+        formatDate={formatDate}
+      />
 
-      {senderInfo && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">Pengirim</h3>
-                <p className="text-sm text-slate-500">Detail informasi pengirim</p>
-              </div>
-              <button
-                onClick={() => setSenderInfo(null)}
-                className="text-slate-500 hover:text-slate-800 text-xl font-bold"
-              >
-                x
-              </button>
-            </div>
-            <div className="space-y-3 text-sm text-slate-700">
-              <div>
-                <div className="text-xs text-slate-500">Nama</div>
-                <div className="font-semibold text-slate-900">{senderInfo?.username || '-'}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500">Email</div>
-                <div className="font-semibold text-slate-900">{senderInfo?.email || '-'}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500">Nomor HP</div>
-                <div className="font-semibold text-slate-900">{senderInfo?.nomer_hp || '-'}</div>
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <button
-                onClick={() => setSenderInfo(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold shadow-soft hover:bg-slate-800"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SenderInfoModal sender={senderInfo} onClose={() => setSenderInfo(null)} />
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toast={toast} onClose={clearToast} />
       <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}

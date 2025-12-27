@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import Toast from '../components/Toast';
+import Toast from '../components/common/Toast';
+import useToast from '../hooks/useToast';
 
 const Tentang = () => {
   const { user } = useAuth();
@@ -11,23 +12,13 @@ const Tentang = () => {
   const [resetOpen, setResetOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [resetting, setResetting] = useState(false);
-  const [toast, setToast] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
 
   const canReset = useMemo(
     () => confirmText.trim().toLowerCase() === 'saya yakin',
     [confirmText]
   );
 
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message, type = 'info') => {
-    if (!message) return;
-    setToast({ message, type });
-  };
 
   const handleReset = async () => {
     if (!canReset || resetting) return;
@@ -81,7 +72,7 @@ const Tentang = () => {
               </div>
               <button
                 onClick={() => {
-                  setToast(null);
+                  clearToast();
                   setConfirmText('');
                   setResetOpen(true);
                 }}
@@ -136,7 +127,7 @@ const Tentang = () => {
         </div>
       )}
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toast={toast} onClose={clearToast} />
     </div>
   );
 };

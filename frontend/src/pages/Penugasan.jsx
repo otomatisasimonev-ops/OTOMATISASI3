@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import Toast from '../components/Toast';
+import Toast from '../components/common/Toast';
+import useToast from '../hooks/useToast';
 
 const DEFAULT_QUOTA = 20;
 
@@ -17,7 +18,7 @@ const Penugasan = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [toast, setToast] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
   const [quota, setQuota] = useState(DEFAULT_QUOTA);
   const [filter, setFilter] = useState('');
   const [requests, setRequests] = useState([]);
@@ -124,12 +125,12 @@ const Penugasan = () => {
       });
       await api.patch(`/quota/user/${selectedUserId}`, { daily_quota: Number(quota) || DEFAULT_QUOTA });
       setMessage('Penugasan dan kuota disimpan');
-      setToast({ message: 'Penugasan dan kuota disimpan', type: 'success' });
+      showToast('Penugasan dan kuota disimpan', 'success');
       await refreshData(true, selectedUserId);
     } catch (err) {
       const msg = err.response?.data?.message || 'Gagal menyimpan penugasan/kuota';
       setMessage(msg);
-      setToast({ message: msg, type: 'error' });
+      showToast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -221,12 +222,12 @@ const Penugasan = () => {
     try {
       await api.patch(`/quota/requests/${reqId}`, { status });
       const verb = status === 'approved' ? 'disetujui' : 'ditolak';
-      setToast({ message: `Permintaan kuota ${verb}`, type: 'success' });
+      showToast(`Permintaan kuota ${verb}`, 'success');
       await refreshData(true, selectedUserId);
       window.dispatchEvent(new Event('quota-requests-updated'));
     } catch (err) {
       const msg = err.response?.data?.message || 'Gagal memproses permintaan';
-      setToast({ message: msg, type: 'error' });
+      showToast(msg, 'error');
     } finally {
       setActioningId(null);
     }
@@ -239,12 +240,6 @@ const Penugasan = () => {
   useEffect(() => {
     setSummaryPage(1);
   }, [badanSummary.length]);
-
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   const handleSelectUser = (id) => {
     setSelectedUserId(id.toString());
@@ -259,7 +254,7 @@ const Penugasan = () => {
   const handleSaveClick = () => {
     if (!selectedUserId) {
       setMessage('Pilih user terlebih dahulu.');
-      setToast({ message: 'Pilih user terlebih dahulu', type: 'error' });
+      showToast('Pilih user terlebih dahulu', 'error');
       return;
     }
     setShowSaveConfirm(true);
@@ -316,20 +311,20 @@ const Penugasan = () => {
 
   const handleBatchAction = async (status) => {
     if (!selectedRequestIds.length) {
-      setToast({ message: 'Pilih permintaan terlebih dahulu', type: 'error' });
+      showToast('Pilih permintaan terlebih dahulu', 'error');
       return;
     }
     setActioningId('batch');
     try {
       await Promise.all(selectedRequestIds.map((id) => api.patch(`/quota/requests/${id}`, { status })));
       const verb = status === 'approved' ? 'disetujui' : 'ditolak';
-      setToast({ message: `${selectedRequestIds.length} permintaan ${verb}`, type: 'success' });
+      showToast(`${selectedRequestIds.length} permintaan ${verb}`, 'success');
       setSelectedRequestIds([]);
       await refreshData(true, selectedUserId);
       window.dispatchEvent(new Event('quota-requests-updated'));
     } catch (err) {
       const msg = err.response?.data?.message || 'Gagal memproses batch';
-      setToast({ message: msg, type: 'error' });
+      showToast(msg, 'error');
     } finally {
       setActioningId(null);
     }
@@ -848,7 +843,7 @@ const Penugasan = () => {
           </div>
         </div>
       )}
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toast={toast} onClose={clearToast} />
     </div>
   );
 };

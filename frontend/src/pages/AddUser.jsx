@@ -2,8 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
-import Toast from '../components/Toast';
-import ConfirmDialog from '../components/ConfirmDialog';
+import Toast from '../components/common/Toast';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import useToast from '../hooks/useToast';
+import useConfirmDialog from '../hooks/useConfirmDialog';
+import ConfirmDeleteUserModal from '../components/addUser/ConfirmDeleteUserModal';
+import ResetPasswordModal from '../components/addUser/ResetPasswordModal';
+import RoleChangeModal from '../components/addUser/RoleChangeModal';
 
 const importFields = [
   { key: 'username', label: 'Username', aliases: ['username', 'user', 'akun'] },
@@ -22,17 +27,8 @@ const AddUser = () => {
     nomer_hp: '',
     email: ''
   });
-  const [toast, setToast] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: '',
-    message: '',
-    confirmLabel: 'Konfirmasi',
-    cancelLabel: 'Batal',
-    tone: 'default',
-    loading: false,
-    onConfirm: null
-  });
+  const { toast, showToast, clearToast } = useToast();
+  const { confirmDialog, openConfirm, closeConfirm, handleConfirm } = useConfirmDialog();
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -88,51 +84,6 @@ const AddUser = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message, type = 'info') => {
-    if (!message) return;
-    setToast({ message, type });
-  };
-
-  const openConfirm = (config) => {
-    setConfirmDialog({
-      open: true,
-      title: config.title || 'Konfirmasi',
-      message: config.message || '',
-      confirmLabel: config.confirmLabel || 'Konfirmasi',
-      cancelLabel: config.cancelLabel || 'Batal',
-      tone: config.tone || 'default',
-      loading: false,
-      onConfirm: config.onConfirm || null
-    });
-  };
-
-  const closeConfirm = () => {
-    setConfirmDialog((prev) => ({
-      ...prev,
-      open: false,
-      loading: false,
-      onConfirm: null
-    }));
-  };
-
-  const handleConfirm = async () => {
-    if (!confirmDialog.onConfirm) {
-      closeConfirm();
-      return;
-    }
-    setConfirmDialog((prev) => ({ ...prev, loading: true }));
-    try {
-      await confirmDialog.onConfirm();
-    } finally {
-      closeConfirm();
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -838,132 +789,30 @@ const AddUser = () => {
         </div>
       )}
 
-      {confirmUser && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-200">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Hapus user?</h3>
-                <p className="text-sm text-slate-600">
-                  User <span className="font-semibold text-slate-900">{confirmUser.username}</span> akan dihapus dan
-                  penugasannya di-reset menjadi belum ditugaskan.
-                </p>
-              </div>
-              <button
-                onClick={() => setConfirmUser(null)}
-                className="text-slate-400 hover:text-slate-700 text-xl font-bold"
-                aria-label="Tutup"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmUser(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deletingId === confirmUser.id}
-                className="px-5 py-2 rounded-xl bg-rose-600 text-white font-semibold shadow-soft hover:bg-rose-700 disabled:opacity-60"
-              >
-                {deletingId === confirmUser.id ? 'Menghapus...' : 'Hapus'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteUserModal
+        user={confirmUser}
+        deleting={confirmUser ? deletingId === confirmUser.id : false}
+        onCancel={() => setConfirmUser(null)}
+        onConfirm={handleDelete}
+      />
 
-      {resetUser && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-200">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Reset password</h3>
-                <p className="text-sm text-slate-600">
-                  User <span className="font-semibold text-slate-900">{resetUser.username}</span>
-                </p>
-              </div>
-              <button
-                onClick={() => setResetUser(null)}
-                className="text-slate-400 hover:text-slate-700 text-xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Password baru</label>
-              <input
-                type="password"
-                value={resetPassword}
-                onChange={(e) => setResetPassword(e.target.value)}
-                className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Minimal 4 karakter"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setResetUser(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleResetPassword}
-                disabled={resetLoading}
-                className="px-5 py-2 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {resetLoading ? 'Memproses...' : 'Reset'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ResetPasswordModal
+        user={resetUser}
+        password={resetPassword}
+        onPasswordChange={setResetPassword}
+        loading={resetLoading}
+        onCancel={() => setResetUser(null)}
+        onConfirm={handleResetPassword}
+      />
 
-      {roleChangeUser && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-200">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Ubah role</h3>
-                <p className="text-sm text-slate-600">
-                  User <span className="font-semibold text-slate-900">{roleChangeUser.username}</span> sekarang{' '}
-                  <span className="font-semibold text-slate-900">{roleChangeUser.role}</span>. Ganti?
-                </p>
-                <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  Peringatan: mengganti role akan mengubah akses halaman dan hak admin. Pastikan Anda memilih user yang benar.
-                </div>
-              </div>
-              <button
-                onClick={() => setRoleChangeUser(null)}
-                className="text-slate-400 hover:text-slate-700 text-xl font-bold"
-                aria-label="Tutup"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setRoleChangeUser(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleChangeRole}
-                disabled={roleChangeLoading}
-                className="px-5 py-2 rounded-xl bg-rose-600 text-white font-semibold shadow-soft hover:bg-rose-700 disabled:opacity-60"
-              >
-                {roleChangeLoading ? 'Memproses...' : 'Ganti role'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RoleChangeModal
+        user={roleChangeUser}
+        loading={roleChangeLoading}
+        onCancel={() => setRoleChangeUser(null)}
+        onConfirm={handleChangeRole}
+      />
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toast={toast} onClose={clearToast} />
       <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}
@@ -980,3 +829,5 @@ const AddUser = () => {
 };
 
 export default AddUser;
+
+

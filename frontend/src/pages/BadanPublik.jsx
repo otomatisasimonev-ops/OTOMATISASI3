@@ -5,8 +5,10 @@ import * as XLSX from 'xlsx';
 import { computeDueInfo } from '../utils/workdays';
 import { getMonitoringMap, saveMonitoringMap } from '../utils/monitoring';
 import { fetchHolidays } from '../services/holidays';
-import Toast from '../components/Toast';
-import ConfirmDialog from '../components/ConfirmDialog';
+import Toast from '../components/common/Toast';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import useToast from '../hooks/useToast';
+import useConfirmDialog from '../hooks/useConfirmDialog';
 
 const emptyForm = {
   nama_badan_publik: '',
@@ -122,17 +124,8 @@ const BadanPublik = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: '',
-    message: '',
-    confirmLabel: 'Konfirmasi',
-    cancelLabel: 'Batal',
-    tone: 'default',
-    loading: false,
-    onConfirm: null
-  });
+  const { toast, showToast, clearToast } = useToast();
+  const { confirmDialog, openConfirm, closeConfirm, handleConfirm } = useConfirmDialog();
   const [forceDeleteIds, setForceDeleteIds] = useState([]);
   const [forceDeleting, setForceDeleting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -197,51 +190,6 @@ const BadanPublik = () => {
     loadHolidays();
   }, []);
 
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message, type = 'info', action) => {
-    if (!message) return;
-    setToast({ message, type, action });
-  };
-
-  const openConfirm = (config) => {
-    setConfirmDialog({
-      open: true,
-      title: config.title || 'Konfirmasi',
-      message: config.message || '',
-      confirmLabel: config.confirmLabel || 'Konfirmasi',
-      cancelLabel: config.cancelLabel || 'Batal',
-      tone: config.tone || 'default',
-      loading: false,
-      onConfirm: config.onConfirm || null
-    });
-  };
-
-  const closeConfirm = () => {
-    setConfirmDialog((prev) => ({
-      ...prev,
-      open: false,
-      loading: false,
-      onConfirm: null
-    }));
-  };
-
-  const handleConfirm = async () => {
-    if (!confirmDialog.onConfirm) {
-      closeConfirm();
-      return;
-    }
-    setConfirmDialog((prev) => ({ ...prev, loading: true }));
-    try {
-      await confirmDialog.onConfirm();
-    } finally {
-      closeConfirm();
-    }
-  };
 
   const samplePreview = useMemo(() => data.slice(0, 3), [data]);
   const filteredData = useMemo(() => {
@@ -1564,7 +1512,7 @@ const BadanPublik = () => {
         </div>
       )}
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toast={toast} onClose={clearToast} />
       <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}

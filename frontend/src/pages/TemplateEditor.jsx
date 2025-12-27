@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DEFAULT_TEMPLATES from '../constants/templates';
 import { useAuth } from '../context/AuthContext';
-import Toast from '../components/Toast';
-import ConfirmDialog from '../components/ConfirmDialog';
+import Toast from '../components/common/Toast';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import useToast from '../hooks/useToast';
+import useConfirmDialog from '../hooks/useConfirmDialog';
+import SaveTemplateModal from '../components/templateEditor/SaveTemplateModal';
 
 const MAX_VERSIONS = 10;
 const AUTOSAVE_DELAY = 800;
@@ -29,17 +32,8 @@ const TemplateEditor = () => {
   };
 
   const [customTemplates, setCustomTemplates] = useState(() => readTemplates(roleKey));
-  const [toast, setToast] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: '',
-    message: '',
-    confirmLabel: 'Konfirmasi',
-    cancelLabel: 'Batal',
-    tone: 'default',
-    loading: false,
-    onConfirm: null
-  });
+  const { toast, showToast, clearToast } = useToast();
+  const { confirmDialog, openConfirm, closeConfirm, handleConfirm } = useConfirmDialog();
 
   useEffect(() => {
     const data = readTemplates(roleKey);
@@ -54,51 +48,6 @@ const TemplateEditor = () => {
     // eslint-disable-next-line react-hooks-exhaustive-deps
   }, [roleKey]);
 
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message, type = 'info') => {
-    if (!message) return;
-    setToast({ message, type });
-  };
-
-  const openConfirm = (config) => {
-    setConfirmDialog({
-      open: true,
-      title: config.title || 'Konfirmasi',
-      message: config.message || '',
-      confirmLabel: config.confirmLabel || 'Konfirmasi',
-      cancelLabel: config.cancelLabel || 'Batal',
-      tone: config.tone || 'default',
-      loading: false,
-      onConfirm: config.onConfirm || null
-    });
-  };
-
-  const closeConfirm = () => {
-    setConfirmDialog((prev) => ({
-      ...prev,
-      open: false,
-      loading: false,
-      onConfirm: null
-    }));
-  };
-
-  const handleConfirm = async () => {
-    if (!confirmDialog.onConfirm) {
-      closeConfirm();
-      return;
-    }
-    setConfirmDialog((prev) => ({ ...prev, loading: true }));
-    try {
-      await confirmDialog.onConfirm();
-    } finally {
-      closeConfirm();
-    }
-  };
 
   const defaultIds = useMemo(() => new Set(DEFAULT_TEMPLATES.map((t) => t.id)), []);
 
@@ -647,43 +596,14 @@ const TemplateEditor = () => {
       </div>
     </div>
 
-      {canEdit && confirmingSave && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3 border border-slate-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Simpan template</h3>
-                <p className="text-sm text-slate-600">
-                  Perubahan akan {overwriteWarning.includes('menimpa') ? 'menimpa template ini.' : 'membuat template baru.'}
-                </p>
-              </div>
-              <button
-                onClick={() => setConfirmingSave(false)}
-                className="text-slate-500 hover:text-slate-800 text-xl font-bold"
-                aria-label="Tutup"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={saveTemplate}
-                className="px-4 py-2 rounded-xl bg-primary text-white font-semibold shadow-soft hover:bg-emerald-700"
-              >
-                Ya, simpan
-              </button>
-              <button
-                onClick={() => setConfirmingSave(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50"
-              >
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SaveTemplateModal
+        open={canEdit && confirmingSave}
+        overwriteWarning={overwriteWarning}
+        onConfirm={saveTemplate}
+        onCancel={() => setConfirmingSave(false)}
+      />
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast toast={toast} onClose={clearToast} />
       <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}
@@ -700,3 +620,5 @@ const TemplateEditor = () => {
 };
 
 export default TemplateEditor;
+
+

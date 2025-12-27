@@ -9,7 +9,7 @@ import RecipientTable from './RecipientTable';
 import ConfirmModal from './ConfirmModal';
 import WarningModal from './WarningModal';
 import SuccessModal from './SuccessModal';
-import Toast from '../Toast';
+import Toast from '../common/Toast';
 import QuoteCard from './QuoteCard';
 import KipFeedCard from './KipFeedCard';
 import QuotaCard from './QuotaCard';
