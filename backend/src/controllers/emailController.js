@@ -149,8 +149,28 @@ const emitLog = async (logId) => {
 };
 
 const createTransporter = (smtpConfig) => {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT || 0);
+  const smtpSecureEnv = process.env.SMTP_SECURE;
+  const smtpService = process.env.SMTP_SERVICE;
+
+  if (smtpHost) {
+    const secure = smtpSecureEnv
+      ? smtpSecureEnv === "true"
+      : smtpPort === 465;
+    return nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort || 2525,
+      secure,
+      auth: {
+        user: smtpConfig.email_address,
+        pass: smtpConfig.app_password,
+      },
+    });
+  }
+
   return nodemailer.createTransport({
-    service: "gmail",
+    service: smtpService || "gmail",
     auth: {
       user: smtpConfig.email_address,
       pass: smtpConfig.app_password,
@@ -166,7 +186,7 @@ const verifySmtpConnection = async (transporter) => {
     return {
       success: false,
       message:
-        "Login SMTP gagal. Periksa email + App Password Gmail, pastikan 2FA aktif dan IMAP diaktifkan.",
+        "Login SMTP gagal. Periksa kredensial SMTP dan pastikan akses SMTP diaktifkan.",
       detail: err.message,
     };
   }
