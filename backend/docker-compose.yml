@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  backend:
+    image: node:20
+    container_name: backend
+    working_dir: /app
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./.env
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - ../uploads:/app/uploads
+    command: sh -c "npm ci || npm install; node server.js"
