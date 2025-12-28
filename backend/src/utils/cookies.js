@@ -3,7 +3,7 @@ export function setRefreshCookie(res, refreshToken) {
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? "strict" : "lax",
+    sameSite: isProd ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/auth",
   });
@@ -14,7 +14,7 @@ export function setAccessCookie(res, accessToken) {
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? "lax" : "lax",
+    sameSite: isProd ? "none" : "lax",
     maxAge: 15 * 60 * 1000,
     path: "/",
   });
@@ -25,7 +25,7 @@ export function clearRefreshCookie(res) {
   res.clearCookie("refreshToken", {
     httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? "strict" : "lax",
+    sameSite: isProd ? "none" : "lax",
     path: "/auth",
   });
 }
@@ -35,7 +35,7 @@ export function clearAccessCookie(res) {
   res.clearCookie("accessToken", {
     httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? "strict" : "lax",
+    sameSite: isProd ? "none" : "lax",
     path: "/",
   });
 }
