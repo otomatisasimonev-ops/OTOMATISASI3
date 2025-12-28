@@ -31,6 +31,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+// Render sits behind a proxy; enable trusted proxy for rate-limit to read X-Forwarded-For.
+app.set("trust proxy", 1);
 // __dirname replacement untuk ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
