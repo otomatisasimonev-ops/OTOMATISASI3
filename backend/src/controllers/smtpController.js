@@ -17,15 +17,33 @@ const ERROR_MESSAGES = {
   MISSING_CREDENTIALS: "Email dan App Password wajib diisi",
   NO_CONFIG: "SMTP belum disetel. Isi email + App Password dulu.",
   SMTP_INVALID:
-    "SMTP tidak valid. Periksa email + App Password Gmail, pastikan 2FA aktif dan IMAP diaktifkan.",
+    "SMTP tidak valid. Periksa kredensial SMTP dan pastikan akses SMTP diaktifkan.",
   IMAP_INVALID:
     "IMAP gagal diverifikasi. Pastikan IMAP diaktifkan dan App Password benar.",
 };
 
 // Helper functions
 const createSmtpTransporter = (email, password) => {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT || 0);
+  const smtpSecureEnv = process.env.SMTP_SECURE;
+  const smtpService = process.env.SMTP_SERVICE;
+
+  if (smtpHost) {
+    const secure = smtpSecureEnv
+      ? smtpSecureEnv === "true"
+      : smtpPort === 465;
+    return nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort || 2525,
+      secure,
+      auth: { user: email, pass: password },
+    });
+  }
+
   return nodemailer.createTransport({
     ...GMAIL_SMTP_CONFIG,
+    service: smtpService || GMAIL_SMTP_CONFIG.service,
     auth: { user: email, pass: password },
   });
 };
